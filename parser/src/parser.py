@@ -12,6 +12,8 @@ from telethon.errors.rpcerrorlist import UserAlreadyParticipantError, InviteRequ
 from shared_models.parser.errors import FloodWait, InvalidChannelLink, UserBan, CannotGetChannelInfo
 from telethon.tl.functions.messages import ImportChatInviteRequest
 from shared_models import Channel as ChannelInfo
+from telethon.errors.rpcbaseerrors import FloodError
+from telethon.errors.rpcerrorlist import FloodWaitError
 
 
 class Parser:
@@ -113,6 +115,11 @@ class Parser:
             except asyncio.TimeoutError:
                 await non_active_client.mark_as_ban()
                 raise TimeoutError("Timeout while getting channel info. Client may be banned")
+            except FloodWaitError as e:
+                raise FloodWait(e.seconds)
+            except FloodError as e:
+                await non_active_client.mark_as_ban()
+                raise UserBan("User is banned from the channel") from e
                     
     async def _get_channel_info_internal(self, client: TelegramClient, request: GetChannelInfoRequest) -> GetChannelInfoResponse:
         entity = await self.get_channel_entity(client, request.channel_link)
