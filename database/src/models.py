@@ -7,9 +7,10 @@ class Channel(models.Model):
     name = fields.CharField(max_length=255)
     description = fields.TextField(null=True)
     created_at = fields.DatetimeField(auto_now_add=True)
-    
+
     def __str__(self):
         return self.name
+
 
 class ChannelStatistics(models.Model):
     id = fields.IntField(pk=True)
@@ -18,9 +19,9 @@ class ChannelStatistics(models.Model):
     views_24h = fields.IntField()
     posts_count = fields.IntField()
     recorded_at = fields.DatetimeField(auto_now_add=True)
-    
-    class Meta:
+
+    class Meta:  # type: ignore
         unique_together = ("channel", "recorded_at")
-    
+
     def __str__(self):
         return f"{self.channel.name} - {self.recorded_at}"
