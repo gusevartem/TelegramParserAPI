@@ -55,9 +55,9 @@ class CustomClient:
                 password = f.read().strip()
 
         return await tdesk.ToTelethon(
-            session=self._session, # type: ignore
+            session=self._session,  # type: ignore
             api=api,
-            password=password, # type: ignore
+            password=password,  # type: ignore
             auto_reconnect=False,
         )
 
