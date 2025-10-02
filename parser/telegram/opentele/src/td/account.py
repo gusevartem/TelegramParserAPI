@@ -15,7 +15,6 @@ import logging
 
 class MapData(BaseObject):  # nocov
     def __init__(self, basePath: str) -> None:
-
         self.basePath = basePath
 
         self._draftsMap: Dict[PeerId, FileKey] = {}
@@ -52,7 +51,6 @@ class MapData(BaseObject):  # nocov
         self._recentMasksKey = FileKey(0)
 
     def read(self, localKey: td.AuthKey, legacyPasscode: QByteArray) -> None:
-
         try:
             mapData = td.Storage.ReadFile("map", self.basePath)
         except OpenTeleException as e:
@@ -71,7 +69,6 @@ class MapData(BaseObject):  # nocov
         ExpectStreamStatus(mapData.stream, "Could not stream data from mapData")
 
         if not localKey:
-
             # LocalEncryptSaltSize = 32
             Expects(
                 legacySalt.size() == 32,
@@ -310,7 +307,11 @@ class MapData(BaseObject):  # nocov
             mapSize += sizeof(uint32) + sizeof(uint64)
         if self._installedMasksKey or self._recentMasksKey or self._archivedMasksKey:
             mapSize += sizeof(uint32) + 3 * sizeof(uint64)
-        if self._installedCustomEmojiKey or self._featuredCustomEmojiKey or self._archivedCustomEmojiKey:
+        if (
+            self._installedCustomEmojiKey
+            or self._featuredCustomEmojiKey
+            or self._archivedCustomEmojiKey
+        ):
             mapSize += sizeof(uint32) + 3 * sizeof(uint64)
         if self._searchSuggestionsKey:
             mapSize += sizeof(uint32) + sizeof(uint64)
@@ -384,12 +385,16 @@ class MapData(BaseObject):  # nocov
             stream.writeUInt64(self._recentMasksKey)
             stream.writeUInt64(self._archivedMasksKey)
 
-        if self._installedCustomEmojiKey or self._featuredCustomEmojiKey or self._archivedCustomEmojiKey:
+        if (
+            self._installedCustomEmojiKey
+            or self._featuredCustomEmojiKey
+            or self._archivedCustomEmojiKey
+        ):
             stream.writeUInt32(lskType.lskCustomEmojiKeys)
             stream.writeUInt64(self._installedCustomEmojiKey)
             stream.writeUInt64(self._featuredCustomEmojiKey)
             stream.writeUInt64(self._archivedCustomEmojiKey)
-        
+
         if self._searchSuggestionsKey:
             stream.writeUInt32(lskType.lskSearchSuggestions)
             stream.writeUInt64(self._searchSuggestionsKey)
@@ -501,7 +506,11 @@ class StorageAccount(BaseObject):  # nocov
         # Intended for internal usage only
 
         # mtp = ReadEncryptedFile(ToFilePart(self.__dataNameKey), self.__basePath, self.localKey)
-        mtp = td.Storage.ReadEncryptedFile(td.Storage.ToFilePart(self.__dataNameKey), self.__baseGlobalPath, self.localKey)  # type: ignore
+        mtp = td.Storage.ReadEncryptedFile(
+            td.Storage.ToFilePart(self.__dataNameKey),
+            self.__baseGlobalPath,
+            self.localKey,
+        )  # type: ignore
 
         blockId = mtp.stream.readInt32()
 
@@ -527,7 +536,7 @@ class StorageAccount(BaseObject):  # nocov
 
             self.__config = td.MTP.Config.FromSerialized(serialized)
             return self.__config
-        except OpenTeleException as e:
+        except OpenTeleException:
             pass
 
         return td.MTP.Config(td.MTP.Environment.Production)
@@ -866,7 +875,6 @@ class Account(BaseObject):
         )
 
         def readKeys(keys: typing.List[td.AuthKey]):
-
             key_count = stream.readInt32()
             Expects(
                 stream.status() == QDataStream.Status.Ok,
@@ -913,7 +921,6 @@ class Account(BaseObject):
             return 4 + len(list) * (4 + td.AuthKey.kSize)
 
         def writeKeys(stream: QDataStream, keys: typing.List[td.AuthKey]):
-
             stream.writeInt32(len(keys))
             for key in keys:
                 stream.writeInt32(key.dcId)
@@ -1019,7 +1026,6 @@ class Account(BaseObject):
         password: str = None,
         **kwargs,
     ) -> tl.TelegramClient:
-
         Expects(
             self.isLoaded(),
             TDAccountNotLoaded(
@@ -1039,7 +1045,6 @@ class Account(BaseObject):
         password: str = None,
         owner: td.TDesktop = None,
     ):
-
         Expects(
             (flag == CreateNewSession) or (flag == UseCurrentSession),
             LoginFlagInvalid("LoginFlag invalid"),
@@ -1071,16 +1076,15 @@ class Account(BaseObject):
         dcId = DcId(ss.dc_id)
         userId = copy.UserId
         authKey = td.AuthKey(authKey, td.AuthKeyType.ReadFromFile, dcId)
-        
+
         if userId == None:
             await copy.connect()
             await copy.get_me()
             userId = copy.UserId
-            
+
         newAccount = None
 
         if owner != None:
-
             Expects(
                 owner.accountsCount < td.TDesktop.kMaxAccounts,
                 exception=MaxAccountLimit(

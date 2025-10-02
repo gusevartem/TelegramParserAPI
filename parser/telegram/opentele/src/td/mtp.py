@@ -60,8 +60,7 @@ class MTP(BaseObject):  # nocov
         def applyOneGuarded(
             self, id: DcId, flags: MTP.DcOptions.Flag, ip: str, port: int, secret: bytes
         ):
-
-            if not id in self._data:
+            if id not in self._data:
                 self._data[id] = []
             else:
                 for endpoint in self._data[id]:
@@ -73,21 +72,25 @@ class MTP(BaseObject):  # nocov
             self._data[id].append(endpoint)
 
         def constructFromBuiltIn(self) -> None:
-
             # TO BE ADDED
             # self.readBuiltInPublicKeys()
 
             def addToData(dcs: List[BuiltInDc], flags: MTP.DcOptions.Flag):
-
                 for dc in dcs:
                     self.applyOneGuarded(dc.id, flags, dc.ip, dc.port, bytes())
 
             if self.isTestMode():
                 addToData(BuiltInDc.kBuiltInDcsTest, MTP.DcOptions.Flag.f_static | 0)  # type: ignore
-                addToData(BuiltInDc.kBuiltInDcsIPv6Test, MTP.DcOptions.Flag.f_static | MTP.DcOptions.Flag.f_ipv6)  # type: ignore
+                addToData(
+                    BuiltInDc.kBuiltInDcsIPv6Test,
+                    MTP.DcOptions.Flag.f_static | MTP.DcOptions.Flag.f_ipv6,
+                )  # type: ignore
             else:
                 addToData(BuiltInDc.kBuiltInDcs, MTP.DcOptions.Flag.f_static | 0)  # type: ignore
-                addToData(BuiltInDc.kBuiltInDcsIPv6, MTP.DcOptions.Flag.f_static | MTP.DcOptions.Flag.f_ipv6)  # type: ignore
+                addToData(
+                    BuiltInDc.kBuiltInDcsIPv6,
+                    MTP.DcOptions.Flag.f_static | MTP.DcOptions.Flag.f_ipv6,
+                )  # type: ignore
 
         def constructFromSerialized(self, serialized: QByteArray):
             stream = QDataStream(serialized)
@@ -137,7 +140,6 @@ class MTP(BaseObject):  # nocov
             # Read CDN config
 
         def Serialize(self) -> QByteArray:
-
             optionsCount = 0
             for dcId, endpoints in self._data.items():
                 if DcId.BareDcId(dcId) > 1000:
@@ -344,7 +346,6 @@ class MTP(BaseObject):  # nocov
             MTP.DcOptions.Address,
             Dict[MTP.DcOptions.Protocol, List[MTP.DcOptions.Endpoint]],
         ]:
-
             endpoints = self._dcOptions._data[dcId]
 
             Address = MTP.DcOptions.Address
@@ -357,9 +358,7 @@ class MTP(BaseObject):  # nocov
             results[Address.IPv6] = {Protocol.Tcp: [], Protocol.Http: []}  # type: ignore
 
             for endpoint in endpoints:
-
                 if dcId == 0 or endpoint.id == dcId:
-
                     flags = endpoint.flags
                     address = Address.IPv6 if (flags & Flag.f_ipv6) else Address.IPv4
                     results[address][Protocol.Tcp].append(endpoint)  # type: ignore
@@ -427,7 +426,6 @@ class MTP(BaseObject):  # nocov
 
         @staticmethod
         def FromSerialized(serialized: QByteArray) -> MTP.Config:
-
             stream = QDataStream(serialized)
             stream.setVersion(QDataStream.Version.Qt_5_1)
 

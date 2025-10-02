@@ -27,7 +27,6 @@ class Serialize(BaseObject):
 class Storage(BaseObject):
     class ReadSettingsContext(BaseObject):  # pragma: no cover
         def __init__(self) -> None:
-
             self.fallbackConfigLegacyDcOptions: td.MTP.DcOptions = td.MTP.DcOptions(
                 td.MTP.Environment.Production
             )
@@ -232,7 +231,6 @@ class Storage(BaseObject):
 
     @staticmethod
     def WriteFile(fileName: str, basePath: str, data: bytes):
-
         dir = QDir(basePath)
         if not dir.exists():
             dir.mkpath(basePath)
@@ -249,12 +247,10 @@ class Storage(BaseObject):
 
     @staticmethod
     def ReadFile(fileName: str, basePath: str) -> FileReadDescriptor:
-
         to_try = ["s", "1", "0"]
         tries_exception = None
         for chr in to_try:
             try:
-
                 file = QFile(Storage.PathJoin(basePath, fileName + chr))
                 if not file.open(QIODevice.OpenModeFlag.ReadOnly):
                     tries_exception = TFileNotFound(f"Could not open {fileName}")
@@ -305,18 +301,19 @@ class Storage(BaseObject):
 
                 file.close()
                 return result
-            except IOError as e:
+            except IOError:
                 pass
 
-        raise tries_exception if tries_exception else TFileNotFound(
-            f"Could not open {fileName}"
+        raise (
+            tries_exception
+            if tries_exception
+            else TFileNotFound(f"Could not open {fileName}")
         )
 
     @staticmethod
     def ReadEncryptedFile(
         fileName: str, basePath: str, authKey: td.AuthKey
     ) -> FileReadDescriptor:
-
         result = Storage.ReadFile(fileName, basePath)
         encrypted = QByteArray()
         result.stream >> encrypted
@@ -350,7 +347,6 @@ class Storage(BaseObject):
     def ReadSetting(
         blockId: int, stream: QDataStream, version: int, context: ReadSettingsContext
     ) -> bool:  # pragma: no cover
-
         if blockId == dbi.DcOptionOldOld:
             dcId = DcId(stream.readUInt32())
             host = stream.readQString()
@@ -469,7 +465,6 @@ class Storage(BaseObject):
     def CreateLegacyLocalKey(
         salt: QByteArray, passcode: QByteArray = QByteArray()
     ) -> td.AuthKey:
-
         iterationsCount = 1 if passcode.isEmpty() else 100000
         return td.AuthKey(
             hashlib.pbkdf2_hmac(
@@ -495,7 +490,6 @@ class Storage(BaseObject):
 
     @staticmethod
     def DecryptLocal(encrypted: QByteArray, authKey: td.AuthKey) -> EncryptedDescriptor:
-
         encryptedSize = encrypted.size()
         if (encryptedSize <= 16) or (encryptedSize & 0x0F):
             raise TDataBadEncryptedDataSize("Bad encrypted part size: {encryptedSize}")
@@ -564,7 +558,6 @@ class Storage(BaseObject):
 
     @staticmethod
     def GetAbsolutePath(path: str = None) -> str:
-
         if path == None or path == "":
             path = os.getcwd()
 
