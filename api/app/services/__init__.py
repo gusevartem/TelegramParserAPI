@@ -1,7 +1,5 @@
-from .impl.parser import Parser
-from .impl.telegram import Telegram
-from .impl.database import Database
-from .impl.scheduler import Scheduler
-from .impl.storage import Storage
+from .impl import Parser, Telegram, Database, Scheduler, Storage
+from .token import verify_api_key
 
-__all__ = ["Parser", "Telegram", "Database", "Scheduler", "Storage"]
+
+__all__ = ["Parser", "Telegram", "Database", "Scheduler", "Storage", "verify_api_key"]

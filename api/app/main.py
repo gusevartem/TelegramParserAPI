@@ -1,7 +1,7 @@
 from fastapi import FastAPI
-from app.routers import parser
-from app.routers import public
-from app.routers import scheduler
+from .routers import parser
+from .routers import public
+from .routers import scheduler
 from .config import ApiServiceConfig
 
 
