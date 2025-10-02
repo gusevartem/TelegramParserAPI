@@ -5,4 +5,4 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "shared_models"
 version = "0.1.0"
-dependencies = ["pydantic"]
+dependencies = ["pydantic>=1.7.4,!=1.8,!=1.8.1,!=2.0.0,!=2.0.1,!=2.1.0,<3.0.0"]
