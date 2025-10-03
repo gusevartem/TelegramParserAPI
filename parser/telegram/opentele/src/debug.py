@@ -1,6 +1,3 @@
-import inspect
-import os
-
 import time
 import atexit
 
@@ -34,7 +31,6 @@ if IS_DEBUG_MODE:
             self.list = sorted(self.list, key=lambda item: item[3])
 
             for item in self.list:
-
                 name = item[0]
                 total_called = item[1]
                 total_time = item[2]
@@ -61,7 +57,6 @@ if IS_DEBUG_MODE:
             return result, diff
 
         def __call__(self, *args, **kwargs) -> t.Any:
-
             # stack = inspect.stack()[1]
 
             # location = f"{os.path.basename(stack.filename)[:-3]}"
@@ -112,7 +107,6 @@ if IS_DEBUG_MODE:
                 self.__fname__ = self.__fname__[len(self.__ownername__) + 1 :]
 
         def __new__(cls, decorated_func: _F) -> _F:
-
             firstdct = dict(decorated_func.__dict__)
             for i, x in cls.__dict__.items():
                 firstdct[i] = x
@@ -147,7 +141,6 @@ if IS_DEBUG_MODE:
             return self
 
         def __call__(self, *args, **kwargs) -> t.Any:
-
             begin = time.perf_counter()
             result = self.__fget__(self.__owner__, *args, **kwargs)  # type: ignore
             diff = round((time.perf_counter() - begin) * 1000, 2)
@@ -161,7 +154,6 @@ if IS_DEBUG_MODE:
             self.__fname__ = name
 
         def __new__(cls, decorated_func):
-
             firstdct = dict(decorated_func.__dict__)
             for i, x in cls.__dict__.items():
                 firstdct[i] = x

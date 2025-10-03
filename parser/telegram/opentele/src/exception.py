@@ -11,7 +11,6 @@ class OpenTeleException(BaseException):  # nocov
     """
 
     def __init__(self, message: str = None, stack_index: int = 1) -> None:
-
         super().__init__(message if (message != None) else "")
 
         self.message = message
@@ -49,7 +48,6 @@ class OpenTeleException(BaseException):  # nocov
 
         reason += " [ Called by "
         if self._caller_class != None:
-
             parent_list = []
             base = self._caller_class
             while hasattr(base, "__name__"):
@@ -258,7 +256,6 @@ def Expects(
     silent: bool = False,
     stack_index: int = 1,
 ) -> bool:
-
     """Expect a condition to be `True`, raise an `OpenTeleException` if it's not.
 
     ### Arguments:
@@ -293,7 +290,6 @@ def Expects(
     silent: bool = False,
     stack_index: int = 1,
 ) -> bool:  # nocov
-
     if condition:
         if done != None:
             done()

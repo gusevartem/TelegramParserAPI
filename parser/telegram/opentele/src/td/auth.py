@@ -1,6 +1,5 @@
 from __future__ import annotations
 from .configs import *
-from . import shared as td
 
 import hashlib
 
@@ -51,7 +50,12 @@ class AuthKey(BaseObject):
 
     kSize = 256
 
-    def __init__(self, key: bytes = bytes(), type: AuthKeyType = AuthKeyType.Generated, dcId: DcId = DcId.Invalid) -> None:  # type: ignore
+    def __init__(
+        self,
+        key: bytes = bytes(),
+        type: AuthKeyType = AuthKeyType.Generated,
+        dcId: DcId = DcId.Invalid,
+    ) -> None:  # type: ignore
         self.__type = type
         self.__dcId = dcId
         self.__key = key

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from .configs import *
-from . import shared as tl
 
 from telethon.errors.rpcerrorlist import (
     PasswordHashInvalidError,
@@ -12,7 +11,6 @@ from telethon.errors.rpcerrorlist import (
     HashInvalidError,
 )
 from telethon.tl.types import TypeInputClientProxy, TypeJSONValue
-from telethon.tl.types.auth import LoginTokenMigrateTo
 import logging
 import warnings
 from typing import Awaitable
@@ -33,7 +31,6 @@ class CustomInitConnectionRequest(functions.InitConnectionRequest):
         proxy: TypeInputClientProxy = None,
         params: TypeJSONValue = None,
     ):
-
         # our hook pass pid as device_model
         data = APIData.findData(device_model)  # type: ignore
         if data != None:
@@ -394,12 +391,12 @@ class TelegramClient(telethon.TelegramClient, BaseObject):
         try:
             await self(functions.account.ResetAuthorizationRequest(hash))
 
-        except FreshResetAuthorisationForbiddenError as e:
+        except FreshResetAuthorisationForbiddenError:
             raise FreshResetAuthorisationForbiddenError(
                 "You can't logout other sessions if less than 24 hours have passed since you logged on the current session."
             )
 
-        except HashInvalidError as e:
+        except HashInvalidError:
             raise HashInvalidError("The provided hash is invalid.")
 
     async def TerminateAllSessions(self) -> bool:
@@ -555,7 +552,6 @@ class TelegramClient(telethon.TelegramClient, BaseObject):
         password: str = None,
         **kwargs,
     ) -> TelegramClient:
-
         newClient = TelegramClient(session, api=api, **kwargs)
 
         try:
@@ -563,14 +559,12 @@ class TelegramClient(telethon.TelegramClient, BaseObject):
             # switch DC for now because i can't handle LoginTokenMigrateTo...
             if newClient.session.dc_id != self.session.dc_id:
                 await newClient._switch_dc(self.session.dc_id)
-        except OSError as e:
+        except OSError:
             raise BaseException("Cannot connect")
 
         if await newClient.is_user_authorized():  # nocov
-
             currentAuth = await newClient.GetCurrentSession()
             if currentAuth != None:
-
                 if currentAuth.api_id == api.api_id:
                     warnings.warn(
                         "\nCreateNewSession - a session file with the same name "
@@ -608,7 +602,6 @@ class TelegramClient(telethon.TelegramClient, BaseObject):
             kwargs["request_retries"] if "request_retries" in kwargs else 5
         )  # default value for request_retries
         for attempt in range(request_retries):  # nocov
-
             try:
                 # we could have been already authorized, but it still raised an timeouterror (??!)
                 if attempt > 0 and await newClient.is_user_authorized():
@@ -654,7 +647,6 @@ class TelegramClient(telethon.TelegramClient, BaseObject):
                 raise e
 
             except (TimeoutError, asyncio.TimeoutError) as e:
-
                 warnings.warn(
                     "\nQRLoginToNewClient attemp {} failed because {}".format(
                         attempt + 1, type(e)
@@ -664,8 +656,7 @@ class TelegramClient(telethon.TelegramClient, BaseObject):
                     "Something went wrong, i couldn't perform the QR login process"
                 )
 
-            except telethon.errors.SessionPasswordNeededError as e:
-
+            except telethon.errors.SessionPasswordNeededError:
                 # requires an 2fa password
 
                 Expects(
@@ -678,7 +669,9 @@ class TelegramClient(telethon.TelegramClient, BaseObject):
 
                 # two-step verification
                 try:
-                    pwd: types.account.Password = await newClient(functions.account.GetPasswordRequest())  # type: ignore
+                    pwd: types.account.Password = await newClient(
+                        functions.account.GetPasswordRequest()
+                    )  # type: ignore
                     result = await newClient(
                         functions.auth.CheckPasswordRequest(
                             pwd_mod.compute_check(pwd, password)  # type: ignore
@@ -829,7 +822,6 @@ class TelegramClient(telethon.TelegramClient, BaseObject):
         password: str = None,
         **kwargs,
     ) -> TelegramClient:
-
         Expects(
             (flag == CreateNewSession) or (flag == UseCurrentSession),
             LoginFlagInvalid("LoginFlag invalid"),
@@ -854,7 +846,6 @@ class TelegramClient(telethon.TelegramClient, BaseObject):
         if (flag == UseCurrentSession) and not (
             isinstance(api, APIData) or APIData.__subclasscheck__(api)
         ):  # nocov
-
             warnings.warn(  # type: ignore
                 "\nIf you use an existing Telegram Desktop session "
                 "with unofficial API_ID and API_HASH, "
@@ -870,7 +861,10 @@ class TelegramClient(telethon.TelegramClient, BaseObject):
         #     connection == ConnectionTcpFull,
         #     "Other connection type is not supported yet",
         # )
-        Expects(len(endpoints[address][protocol]) > 0, "Couldn't find endpoint for this account, something went wrong?")  # type: ignore
+        Expects(
+            len(endpoints[address][protocol]) > 0,
+            "Couldn't find endpoint for this account, something went wrong?",
+        )  # type: ignore
 
         endpoint = endpoints[address][protocol][0]  # type: ignore
 
@@ -922,7 +916,6 @@ class TelegramClient(telethon.TelegramClient, BaseObject):
 
 
 def PrettyTable(table: List[Dict[str, Any]], addSplit: List[int] = []):
-
     # ! Warning: SUPER DIRTY CODE AHEAD
     padding = {}
 

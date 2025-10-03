@@ -5,9 +5,7 @@ from tortoise.models import Model
 class Client(Model):
     id = fields.IntField(pk=True)
     telegram_credentials = fields.ForeignKeyField(
-        "models.TelegramCredentials", 
-        related_name="client", 
-        on_delete=fields.CASCADE
+        "models.TelegramCredentials", related_name="client", on_delete=fields.CASCADE
     )
     users_count = fields.IntField(default=0)
     working = fields.BooleanField(default=True)

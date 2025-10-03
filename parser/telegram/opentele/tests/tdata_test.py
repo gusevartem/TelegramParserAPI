@@ -1,4 +1,6 @@
-import os, sys, pathlib
+import os
+import sys
+import pathlib
 import re
 import atexit
 
@@ -15,7 +17,6 @@ def on_exit():
 
 
 def on_init():
-
     os.rename(debug_py, debug_bk_py)
     src = open(debug_bk_py, "r")
     dst = open(debug_py, "w")
@@ -33,8 +34,7 @@ on_init()
 from src.td import TDesktop
 from src.td.account import Account
 from src.tl.telethon import TelegramClient
-from src.api import API, APIData, CreateNewSession, UseCurrentSession
-from telethon.errors.rpcerrorlist import FreshResetAuthorisationForbiddenError
+from src.api import API, APIData, UseCurrentSession
 
 import pytest
 import typing as t
@@ -53,7 +53,6 @@ def profile_path():
 
 
 def test_random_api():
-
     API_TYPE = t.Union[APIData, t.Type[APIData]]
 
     def cmp(src: API_TYPE, dst: API_TYPE) -> bool:
@@ -116,7 +115,6 @@ def test_random_api():
 
 
 async def tdata_to_telethon():
-
     api_ios = API.TelegramIOS.Generate(X1)
     api_android = API.TelegramAndroid.Generate()
 
@@ -154,7 +152,6 @@ async def tdata_to_telethon():
 
 
 async def telethon_from_tdata():
-
     api_ios = API.TelegramIOS.Generate(X1)
     api_android = API.TelegramAndroid.Generate()
 
@@ -214,7 +211,7 @@ async def check_telegramclient():
 
     try:
         await oldClient.TerminateSession(0)
-    except BaseException as e:
+    except BaseException:
         pass
 
     await oldClient.connect()
@@ -226,7 +223,7 @@ async def check_telegramclient():
 
     try:
         await oldClient.TerminateSession(0)
-    except BaseException as e:
+    except BaseException:
         pass
 
     assert await oldClient.TerminateAllSessions()
@@ -237,7 +234,6 @@ async def check_telegramclient():
 
 @pytest.mark.asyncio
 async def test_entry_point(event_loop):
-
     ter = TerminalWriter(sys.stdout)
     ter.hasmarkup = True
     event_loop._close = event_loop.close

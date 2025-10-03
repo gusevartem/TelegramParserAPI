@@ -1,6 +1,6 @@
 services:
   redis:
-    image: redis:latest
+    image: redis:7.4
     restart: always
     volumes:
       - ./runtime/redis-data:/data

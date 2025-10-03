@@ -1,7 +1,8 @@
 from __future__ import annotations
-from typing import List, Dict, Tuple, TypeVar, Type
+from typing import List, Dict, TypeVar, Type
 from .utils import *
-import hashlib, os
+import hashlib
+import os
 
 _T = TypeVar("_T")
 
@@ -16,7 +17,6 @@ class DeviceInfo(object):
 
 
 class SystemInfo(BaseObject):
-
     deviceList: List[DeviceInfo] = []
     device_modesl: List[str] = []
     system_versions: List[str] = []
@@ -42,13 +42,12 @@ class SystemInfo(BaseObject):
 
     @classmethod
     def _strtohashid(cls, unique_id: str = None):
-
         if unique_id != None and not isinstance(unique_id, str):
             unique_id = str(unique_id)
 
         byteid = os.urandom(32) if unique_id == None else unique_id.encode("utf-8")
 
-        return int(hashlib.sha1(byteid).hexdigest(), 16) % (10 ** 12)
+        return int(hashlib.sha1(byteid).hexdigest(), 16) % (10**12)
 
     @classmethod
     def _hashtorange(cls, hash_id: int, max, min=0):
@@ -64,7 +63,6 @@ class SystemInfo(BaseObject):
 
 
 class GeneralDesktopDevice(SystemInfo):
-
     # Total: 794 devices, update Jan 10th 2022
     # Real device models that I crawled myself from the internet
     #
@@ -879,9 +877,7 @@ class WindowsDevice(GeneralDesktopDevice):
 
     @classmethod
     def __gen__(cls: Type[WindowsDevice]) -> None:
-
         if len(cls.deviceList) == 0:
-
             results: List[DeviceInfo] = []
 
             for model in cls.device_models:
@@ -893,13 +889,11 @@ class WindowsDevice(GeneralDesktopDevice):
 
 
 class LinuxDevice(GeneralDesktopDevice):
-
     system_versions: List[str] = []
     deviceList: List[DeviceInfo] = []
 
     @classmethod
     def __gen__(cls: Type[LinuxDevice]) -> None:
-
         if len(cls.system_versions) == 0:
             # https://github.com/desktop-app/lib_base/blob/master/base/platform/linux/base_info_linux.cpp#L129
 
@@ -933,7 +927,6 @@ class LinuxDevice(GeneralDesktopDevice):
             # ]
 
             def getitem(group: List[List[str]], prefix: str = "") -> List[str]:
-
                 prefix = "" if prefix == "" else prefix + " "
                 results = []
                 if len(group) == 1:
@@ -962,7 +955,6 @@ class LinuxDevice(GeneralDesktopDevice):
 
 
 class macOSDevice(GeneralDesktopDevice):
-
     deviceList: List[DeviceInfo] = []
 
     # Total: 54 device models, update Jan 10th 2022
@@ -1088,9 +1080,7 @@ class macOSDevice(GeneralDesktopDevice):
 
     @classmethod
     def __gen__(cls: Type[macOSDevice]) -> None:
-
         if len(cls.deviceList) == 0:
-
             # https://github.com/desktop-app/lib_base/blob/master/base/platform/mac/base_info_mac.mm#L42
 
             def FromIdentifier(model: str):
@@ -1119,7 +1109,7 @@ class macOSDevice(GeneralDesktopDevice):
             new_devices_models = []
             for model in cls.device_models:
                 model = cls._CleanAndSimplify(FromIdentifier(model))
-                if not model in new_devices_models:
+                if model not in new_devices_models:
                     new_devices_models.append(model)
 
             cls.device_models = new_devices_models
@@ -1134,7 +1124,6 @@ class macOSDevice(GeneralDesktopDevice):
 
 
 class AndroidDevice(SystemInfo):
-
     device_models = [
         "Samsung GT-I5510M",
         "Samsung GT-I5800L",
@@ -5361,7 +5350,7 @@ class AndroidDevice(SystemInfo):
         "Huawei Vodafone 858",
         "Huawei MediaPad 7 Classic",
         "Huawei MediaPad 7 Lite II",
-        "Huawei MediaPad 7 Vogue" "Huawei LEO-BX9",
+        "Huawei MediaPad 7 VogueHuawei LEO-BX9",
         "Huawei LEO-DLXX",
         "Huawei GEM-701L",
         "Huawei GEM-702L",
@@ -6023,9 +6012,7 @@ class AndroidDevice(SystemInfo):
 
     @classmethod
     def __gen__(cls: Type[AndroidDevice]) -> None:
-
         if len(cls.deviceList) == 0:
-
             results: List[DeviceInfo] = []
 
             for model in cls.device_models:
@@ -6036,7 +6023,6 @@ class AndroidDevice(SystemInfo):
 
 
 class iOSDeivce(SystemInfo):
-
     device_models = {
         5: ["S"],
         6: [" Plus", "", "S", "S Plus"],
@@ -6067,7 +6053,6 @@ class iOSDeivce(SystemInfo):
 
     @classmethod
     def __gen__(cls: Type[iOSDeivce]) -> None:
-
         if len(cls.deviceList) == 0:
             results: List[DeviceInfo] = []
 
@@ -6085,14 +6070,12 @@ class iOSDeivce(SystemInfo):
                     available_versions = [12, 13, 14, 15]
 
                 for model_name in cls.device_models[id_model]:
-
                     if id_model == 10:
                         id_model = "X"
                     device_model = f"iPhone {id_model}{model_name}"
 
                     for major in available_versions:
                         for minor, patches in cls.system_versions[major].items():
-
                             if len(patches) == 0:
                                 results.append(
                                     DeviceInfo(device_model, f"{major}.{minor}")

@@ -17,6 +17,7 @@ class StatisticsSorting(str, Enum):
     NEWEST = "newest"
     OLDEST = "oldest"
 
+
 class StatisticsItem(BaseModel):
     views: int
     subscribers: int
