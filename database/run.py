@@ -20,6 +20,9 @@ FUNCTIONS = [
     Database.get_channel_by_link,
     Database.get_channels_ids,
     Database.get_24h_statistics,
+    Database.get_messages,
+    Database.update_or_create_message,
+    Database.get_media
 ]
 DEFAULT_POLL_DELAY = float(os.getenv("DEFAULT_POLL_DELAY", "0.01"))
 
