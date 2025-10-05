@@ -14,7 +14,7 @@ load_dotenv()
 REDIS_SETTINGS = RedisSettings(
     os.getenv("REDIS_HOST", "localhost"), int(os.getenv("REDIS_PORT", "6379"))
 )
-FUNCTIONS = [Storage.get, Storage.save]
+FUNCTIONS = [Storage.get_logo, Storage.save_logo, Storage.get_media, Storage.save_media]
 DEFAULT_POLL_DELAY = float(os.getenv("DEFAULT_POLL_DELAY", "0.01"))
 
 ACCESS_KEY = os.getenv("YC_KEY_ID", "")
