@@ -9,6 +9,7 @@ from shared_models.database.get_channel import GetChannelRequest, GetChannelResp
 from shared_models.database.errors import (
     ChannelDoesNotExistError,
     StatsDoesNotExistError,
+    MediaDoesNotExistError,
 )
 from shared_models.database.get_channels_ids import GetChannelsIdsResponse
 from shared_models.database.get_24h_statistics import (
@@ -21,7 +22,15 @@ from shared_models.database.get_channel_by_link import (
     GetChannelByLinkRequest,
     GetChannelByLinkResponse,
 )
-from .models import Channel, ChannelStatistics
+from shared_models.database.get_messages import GetMessagesRequest, GetMessagesResponse
+from shared_models.database.update_or_create_message import (
+    UpdateOrCreateMessageRequest,
+    UpdateOrCreateMessageResponse,
+)
+from .models import Channel, ChannelStatistics, Message, MessageMedia
+from shared_models.message import Message as MessageSharedModel
+from shared_models.message import MessageMedia as MessageMediaSharedModel
+from shared_models.database.get_media import GetMediaRequest, GetMediaResponse
 from tortoise.exceptions import DoesNotExist
 
 
@@ -172,3 +181,104 @@ class Database:
         ]
 
         return Get24hStatisticsResponse(sorting=request.sorting, data=data)
+
+    @staticmethod
+    async def get_messages(ctx, request: GetMessagesRequest) -> GetMessagesResponse:
+        async def get_media_shared_model(
+            message: Message,
+        ) -> list[MessageMediaSharedModel]:
+            media = await MessageMedia.filter(message=message)
+            return [
+                MessageMediaSharedModel(
+                    id=media.id,
+                    mime_type=media.mime_type,
+                    media_type=media.media_type,
+                    data=None,
+                )
+                for media in media
+            ]
+
+        self: Database = ctx["Database_instance"]
+        try:
+            channel = await Channel.get(id=request.channel_id)
+        except DoesNotExist:
+            self.logging.error(f"Channel with id {request.channel_id} does not exist")
+            raise ChannelDoesNotExistError(request.channel_id)
+
+        messages = await Message.filter(channel=channel).order_by("-date")
+
+        data = [
+            MessageSharedModel(
+                message_id=message.id,
+                date=message.date,
+                text=message.text,
+                views=message.views,
+                media=await get_media_shared_model(message),
+            )
+            for message in messages
+        ]
+
+        return GetMessagesResponse(root=data)
+
+    @staticmethod
+    async def update_or_create_message(
+        ctx, request: UpdateOrCreateMessageRequest
+    ) -> UpdateOrCreateMessageResponse:
+        self: Database = ctx["Database_instance"]
+        try:
+            channel = await Channel.get(id=request.channel_id)
+        except DoesNotExist:
+            self.logging.error(f"Channel with id {request.channel_id} does not exist")
+            raise ChannelDoesNotExistError(request.channel_id)
+
+        result, created = await Message.update_or_create(
+            id=request.message.message_id,
+            defaults={
+                "date": request.message.date,
+                "text": request.message.text,
+                "views": request.message.views,
+                "channel": channel,
+            },
+        )
+        message_media: list[MessageMedia] = []
+        if created:
+            for media in request.message.media:
+                message_media.append(
+                    await MessageMedia.create(
+                        message=result,
+                        mime_type=media.mime_type,
+                        media_type=media.media_type,
+                    )
+                )
+        return UpdateOrCreateMessageResponse(
+            message=MessageSharedModel(
+                message_id=result.id,
+                date=result.date,
+                text=result.text,
+                views=result.views,
+                media=[
+                    MessageMediaSharedModel(
+                        id=media.id,
+                        mime_type=media.mime_type,
+                        media_type=media.media_type,
+                        data=None,
+                    )
+                    for media in message_media
+                ],
+            ),
+            record_created=created,
+        )
+
+    @staticmethod
+    async def get_media(ctx, request: GetMediaRequest) -> GetMediaResponse:
+        self: Database = ctx["Database_instance"]
+        try:
+            media = await MessageMedia.get(id=request.media_id)
+            return GetMediaResponse(
+                root=MessageMediaSharedModel(
+                    mime_type=media.mime_type, media_type=media.media_type, id=media.id
+                )
+            )
+        except DoesNotExist:
+            self.logging.info(f"Media with id {request.media_id} does not exist")
+            raise MediaDoesNotExistError(request.media_id)

@@ -21,6 +21,7 @@ class BaseAPIMetaClass(BaseMetaClass):
     def __new__(
         cls: Type[_T], clsName: str, bases: Tuple[type], attrs: Dict[str, Any]
     ) -> _T:
+
         result = super().__new__(cls, clsName, bases, attrs)
         result._clsMakePID()  # type: ignore
         result.__str__ = BaseAPIMetaClass.__str__  # type: ignore
@@ -29,6 +30,7 @@ class BaseAPIMetaClass(BaseMetaClass):
 
     @sharemethod
     def __str__(glob) -> str:
+
         if isinstance(glob, type):
             cls = glob
             result = f"{cls.__name__} {{\n"
@@ -37,6 +39,7 @@ class BaseAPIMetaClass(BaseMetaClass):
             result = f"{cls.__name__}() = {{\n"
 
         for attr, val in glob.__dict__.items():
+
             if (
                 attr.startswith(f"_{cls.__base__.__name__}__")
                 or attr.startswith(f"_{cls.__name__}__")
@@ -158,6 +161,7 @@ class APIData(object, metaclass=BaseAPIMetaClass):
         system_lang_code: str = None,
         lang_pack: str = None,
     ) -> None:
+
         Expects(
             (self.__class__ != APIData) or (api_id != None and api_hash != None),
             NoInstanceMatched("No instace of API matches the arguments"),
@@ -190,6 +194,7 @@ class APIData(object, metaclass=BaseAPIMetaClass):
 
     @sharemethod
     def copy(glob: Union[Type[_T], _T] = _T) -> _T:  # type: ignore
+
         cls = glob if isinstance(glob, type) else glob.__class__
 
         return cls(
@@ -414,6 +419,7 @@ class API(BaseObject):
 
         @classmethod
         def Generate(cls: Type[_T], system: str = None, unique_id: str = None) -> _T:
+
             validList = ["windows", "macos", "linux"]
             if system == None or system not in validList:
                 system = SystemInfo._hashtovalue(

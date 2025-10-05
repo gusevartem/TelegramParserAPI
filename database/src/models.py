@@ -1,4 +1,5 @@
 from tortoise import fields, models
+from shared_models.message import MessageMediaType
 
 
 class Channel(models.Model):
@@ -25,3 +26,18 @@ class ChannelStatistics(models.Model):
 
     def __str__(self):
         return f"{self.channel.name} - {self.recorded_at}"
+
+
+class Message(models.Model):
+    id = fields.IntField(pk=True)
+    date = fields.IntField()
+    text = fields.TextField()
+    views = fields.IntField(null=True)
+    channel = fields.ForeignKeyField("models.Channel", related_name="messages")
+
+
+class MessageMedia(models.Model):
+    id = fields.UUIDField(pk=True)
+    mime_type = fields.CharField(max_length=255)
+    media_type = fields.CharEnumField(MessageMediaType)
+    message = fields.ForeignKeyField("models.Message", related_name="media")
