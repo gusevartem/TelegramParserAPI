@@ -16,6 +16,14 @@ from shared_models.database.get_channel_by_link import (
     GetChannelByLinkResponse,
 )
 from shared_models.database.errors import ChannelDoesNotExistError
+from shared_models.database.update_or_create_message import (
+    UpdateOrCreateMessageRequest,
+    UpdateOrCreateMessageResponse,
+)
+from shared_models.database.get_messages import GetMessagesRequest, GetMessagesResponse
+from shared_models.storage.save_media import SaveMediaRequest
+from shared_models.message import Message as MessageSharedModel
+from shared_models.message import MessageMedia as MessageMediaSharedModel
 from typing import Any, Optional
 from arq import create_pool
 from arq.jobs import Job
@@ -103,7 +111,9 @@ class Scheduler:
             await self.init_allocator()
 
     async def get_channel(self, channel_link: str) -> GetChannelInfoResponse:
-        request = GetChannelInfoRequest(channel_link=channel_link, get_logo=True)
+        request = GetChannelInfoRequest(
+            channel_link=channel_link, get_logo=True, download_message_media=True
+        )
         response = await self.parser_redis.enqueue_job(  # type: ignore
             "Parser.get_channel_info", request
         )
@@ -113,7 +123,64 @@ class Scheduler:
 
     async def update_logo(self, channel_id: int, logo: bytes):
         request = SaveLogoRequest(channel_id=channel_id, logo=logo)
-        await self.storage_redis.enqueue_job("Storage.save", request)  # type: ignore
+        await self.storage_redis.enqueue_job("Storage.save_logo", request)  # type: ignore
+
+    async def process_channel(self, channel_link: str) -> AddChannelResponse:
+        async def save_message(
+            message: MessageSharedModel, channel_id: int
+        ) -> UpdateOrCreateMessageResponse:
+            return await (
+                await self.database_redis.enqueue_job(  # type: ignore
+                    "Database.update_or_create_message",
+                    UpdateOrCreateMessageRequest(
+                        channel_id=channel_id,
+                        message=MessageSharedModel(
+                            message_id=message.message_id,
+                            date=message.date,
+                            text=message.text,
+                            views=message.views,
+                            media=[
+                                MessageMediaSharedModel(
+                                    mime_type=media.mime_type,
+                                    media_type=media.media_type,
+                                )
+                                for media in message.media
+                            ],
+                        ),
+                    ),
+                )
+            ).result()  # type: ignore
+
+        parse_result = await self.get_channel(channel_link=channel_link)
+        # sync with database
+        await (
+            await self.database_redis.enqueue_job(  # type: ignore
+                "Database.update_or_create_channel",
+                parse_result.channel,
+            )
+        ).result()  # type: ignore
+        saved_messages: list[MessageSharedModel] = []
+        for message in parse_result.messages:
+            save_or_update_message = await save_message(
+                message, parse_result.channel.channel_id
+            )
+            if not save_or_update_message.record_created:
+                continue
+            for index, media in enumerate(save_or_update_message.message.media):
+                media_data = message.media[index].data
+                if media_data is None or media.id is None:
+                    raise ValueError("Media data is None or media id is None")
+                await self.storage_redis.enqueue_job(  # type: ignore
+                    "Storage.save_media",
+                    SaveMediaRequest(media_id=media.id, media=media_data),
+                )
+            saved_messages.append(save_or_update_message.message)
+        if not parse_result.logo:
+            raise ValueError("Logo is None")
+        await self.update_logo(parse_result.channel.channel_id, parse_result.logo)
+        return AddChannelResponse(
+            channel=parse_result.channel, messages=saved_messages, success=True
+        )
 
     # Cron
     @staticmethod
@@ -133,24 +200,17 @@ class Scheduler:
             self.logger.info("No channels to update")
             return
 
-        jobs: list[CoroutineType[Any, Any, GetChannelInfoResponse]] = []
+        jobs: list[CoroutineType[Any, Any, AddChannelResponse]] = []
 
         for channel_id in update_channels:
             channel = await self.get_channel_from_db(channel_id)
-            jobs.append(self.get_channel(channel_link=channel.channel.link))
+            jobs.append(self.process_channel(channel_link=channel.channel.link))
 
         results = await asyncio.gather(*jobs, return_exceptions=True)
 
         for result in results:
             if isinstance(result, Exception):
                 self.logger.error(f"Failed to get channel info: {result}")
-                continue
-            else:
-                await self.database_redis.enqueue_job(  # type: ignore
-                    "Database.update_or_create_channel",
-                    result.channel,  # type: ignore
-                )
-                await self.update_logo(result.channel.channel_id, result.logo)  # type: ignore
 
     # Methods
     @staticmethod
@@ -170,12 +230,13 @@ class Scheduler:
             )
             channel_by_link: GetChannelByLinkResponse = await r.result()  # type: ignore
         except ChannelDoesNotExistError:
-            channel = await self.get_channel(channel_link=request.channel_link)
-            await self.database_redis.enqueue_job(  # type: ignore
-                "Database.update_or_create_channel", channel.channel
-            )
-            if channel.logo is not None:
-                await self.update_logo(channel.channel.channel_id, channel.logo)
-            return AddChannelResponse(channel=channel.channel, success=True)
+            return await self.process_channel(request.channel_link)
         else:
-            return AddChannelResponse(channel=channel_by_link.channel, success=False)
+            get_messages_job = await self.database_redis.enqueue_job(  # type: ignore
+                "Database.get_messages",
+                GetMessagesRequest(channel_id=channel_by_link.channel.channel_id),
+            )
+            messages: GetMessagesResponse = await get_messages_job.result()  # type: ignore
+            return AddChannelResponse(
+                channel=channel_by_link.channel, messages=messages.root, success=False
+            )
