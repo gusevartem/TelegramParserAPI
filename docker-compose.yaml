@@ -124,6 +124,3 @@ services:
       - VERBOSE=0
     env_file:
       - .env
-  
-  
-  
