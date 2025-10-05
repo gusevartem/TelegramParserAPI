@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from . import debug
 
-from typing import Tuple, Type, Callable, TypeVar, Optional, List, Any, Dict
+from typing import Coroutine, Tuple, Type, Callable, TypeVar, Optional, List, Any, Dict
 from types import FunctionType
 
 import abc
@@ -20,6 +20,7 @@ class BaseMetaClass(abc.ABCMeta):  # pragma: no cover
     def __new__(
         cls: Type[_T], clsName: str, bases: Tuple[type], attrs: Dict[str, Any]
     ) -> _T:
+
         # Hook all subclass methods
         if debug.IS_DEBUG_MODE:  # pragma: no cover
             ignore_list = [
@@ -34,7 +35,7 @@ class BaseMetaClass(abc.ABCMeta):  # pragma: no cover
 
             for attr, val in attrs.items():
                 if (
-                    attr not in ignore_list
+                    not attr in ignore_list
                     and callable(val)
                     and not isinstance(val, type)
                 ):
@@ -57,6 +58,7 @@ class override(object):  # nocov
     """
 
     def __new__(cls, decorated_func: _F) -> _F:
+
         # check if decorated_cls really is a function
         if not isinstance(decorated_func, FunctionType):
             raise BaseException(
@@ -80,6 +82,7 @@ class extend_class(object):  # nocov
     """
 
     def __new__(cls, decorated_cls: _TCLS, isOverride: bool = False) -> _TCLS:
+
         # check if decorated_cls really is a class (type)
         if not isinstance(cls, type):
             raise BaseException(
@@ -101,6 +104,7 @@ class extend_class(object):  # nocov
             # loop through its parents and add attributes
 
             for attributeName, attributeValue in newAttributes.items():
+
                 # check if class base already has this attribute
                 result = extend_class.getattr(base, attributeName)
 
@@ -108,6 +112,7 @@ class extend_class(object):  # nocov
                     if id(result["value"]) == id(attributeValue):
                         crossDelete[attributeName] = attributeValue
                     else:
+
                         # if not override this attribute
                         if not override.isOverride(attributeValue):
                             print(
@@ -118,6 +123,7 @@ class extend_class(object):  # nocov
             [newAttributes.pop(cross) for cross in crossDelete]
 
         for attributeName, attributeValue in newAttributes.items():
+
             # let's backup this attribute for future uses
             result = extend_class.getattr(base, attributeName)
 
@@ -140,6 +146,7 @@ class extend_class(object):  # nocov
 
     @staticmethod
     def object_hierarchy_getattr(obj: object, attributeName: str) -> List[str]:
+
         results = []
         if type(obj) == object:
             return results
@@ -163,7 +170,7 @@ class extend_class(object):  # nocov
         try:
             value = getattr(obj, attributeName)
             return {"owner": obj, "value": value}
-        except BaseException:
+        except BaseException as e:
             return None
 
 
@@ -189,6 +196,7 @@ class sharemethod(type):
         self.__owner__ = owner
 
     def __new__(cls: Type[_T], func: _F) -> Type[_F]:
+
         clsName = func.__class__.__name__
         bases = func.__class__.__bases__
         attrs = func.__dict__

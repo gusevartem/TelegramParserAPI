@@ -7,6 +7,7 @@ load_dotenv()
 class Config:
     SESSION_DIR = os.path.join(os.path.dirname(__file__), "..", "telegram", "sessions")
     TDATA_PATH = os.path.join(os.path.dirname(__file__), "..", "telegram", "tdata")
+    POSTS_COLLECTION_COUNT = int(os.getenv("POSTS_COLLECTION_COUNT", "3"))
 
 
 class TelegramClientConfig:

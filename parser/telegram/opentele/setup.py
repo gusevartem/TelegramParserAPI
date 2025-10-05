@@ -1,5 +1,6 @@
 import pathlib
 from setuptools import setup
+import re
 
 README = (pathlib.Path(__file__).parent / "README.md").read_text()
 
@@ -39,7 +40,7 @@ setup(
         "opentele",
     ],
     include_package_data=True,
-    packages=[PACKAGE_NAME, PACKAGE_NAME + ".td", PACKAGE_NAME + ".tl"],
+    packages=[PACKAGE_NAME, PACKAGE_NAME+'.td', PACKAGE_NAME+'.tl'],
     package_dir={PACKAGE_NAME: SOURCE_DIRECTORY},
     install_requires=requirements,
 )

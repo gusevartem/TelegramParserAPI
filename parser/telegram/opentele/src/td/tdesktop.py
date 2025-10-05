@@ -270,6 +270,7 @@ class TDesktop(BaseObject):
         Expects(self.isLoaded(), "Failed to load? Something went seriously wrong")
 
         try:
+
             basePath = td.Storage.GetAbsolutePath(basePath)
             if not self.basePath:
                 self.__basePath = basePath
@@ -310,6 +311,7 @@ class TDesktop(BaseObject):
         Expects(not self.isLoaded())
 
         if self.kPerformanceMode and len(self.__passcodeBytes) == 0:
+
             self.__localKey = td.AuthKey(
                 b"\xd8\x74\x59\x44\x51\x9e\x0d\x2d\x71\x30\x9d\x6c\x8d\x27\x2d\xc6\x49\x48\xf5\xe3\xeb\xa7\x68\x53\x24\xd5\xc6\x91\xad\x81\x0c\x20"
                 b"\x3b\x31\xd1\x9d\x29\xae\xd6\xac\x33\xc0\x14\xbe\x6e\x09\x84\x32\x93\xf6\xfa\x32\xdb\xe4\x2b\x6a\x04\xe0\x04\x81\xfa\xe9\x95\x11"
@@ -445,7 +447,7 @@ class TDesktop(BaseObject):
                     if account.isLoaded():
                         self.accounts.append(account)
 
-                except OpenTeleException:
+                except OpenTeleException as e:
                     pass
 
         Expects(len(self.accounts) > 0, "No account has been loaded")
@@ -532,7 +534,7 @@ class TDesktop(BaseObject):
         raise_last_call_error: bool = False,
         loop: asyncio.AbstractEventLoop = None,
         base_logger: Union[str, logging.Logger] = None,
-        receive_updates: bool = True,
+        receive_updates: bool = True
     ) -> tl.TelegramClient:
         pass
 
@@ -542,8 +544,9 @@ class TDesktop(BaseObject):
         flag: Type[LoginFlag] = CreateNewSession,
         api: Union[Type[APIData], APIData] = API.TelegramDesktop,
         password: str = None,
-        **kwargs,
+        **kwargs
     ) -> tl.TelegramClient:
+
         Expects(
             self.isLoaded(),
             TDesktopNotLoaded("You need to load accounts from a tdata folder first"),
@@ -560,7 +563,7 @@ class TDesktop(BaseObject):
             flag=flag,
             api=api,
             password=password,
-            **kwargs,
+            **kwargs
         )
 
     @staticmethod
