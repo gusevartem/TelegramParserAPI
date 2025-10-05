@@ -1,5 +1,6 @@
 from pydantic import BaseModel
 from ..channel import Channel
+from ..message import Message
 
 
 class AddChannelRequest(BaseModel):
@@ -8,4 +9,5 @@ class AddChannelRequest(BaseModel):
 
 class AddChannelResponse(BaseModel):
     channel: Channel
+    messages: list[Message]
     success: bool
