@@ -27,4 +27,4 @@ typing_extensions==4.15.0
 urllib3==2.5.0
 wrapt==1.17.3
 yarl==1.20.1
-sentry-sdk==2.35.1
+sentry-sdk==2.39.0
