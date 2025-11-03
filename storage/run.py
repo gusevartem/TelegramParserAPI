@@ -10,6 +10,12 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+import sentry_sdk
+
+sentry_sdk.init(
+    dsn=os.getenv("SENTRY_DSN"),
+    send_default_pii=True,
+)
 
 REDIS_SETTINGS = RedisSettings(
     os.getenv("REDIS_HOST", "localhost"), int(os.getenv("REDIS_PORT", "6379"))

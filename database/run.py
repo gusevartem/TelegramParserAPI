@@ -10,6 +10,12 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+import sentry_sdk
+
+sentry_sdk.init(
+    dsn=os.getenv("SENTRY_DSN"),
+    send_default_pii=True,
+)
 
 REDIS_SETTINGS = RedisSettings(
     os.getenv("REDIS_HOST", "localhost"), int(os.getenv("REDIS_PORT", "6379"))
@@ -22,7 +28,7 @@ FUNCTIONS = [
     Database.get_24h_statistics,
     Database.get_messages,
     Database.update_or_create_message,
-    Database.get_media
+    Database.get_media,
 ]
 DEFAULT_POLL_DELAY = float(os.getenv("DEFAULT_POLL_DELAY", "0.01"))
 
