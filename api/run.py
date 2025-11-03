@@ -6,6 +6,7 @@ import sentry_sdk
 
 sentry_sdk.init(
     dsn=os.getenv("SENTRY_DSN"),
+    environment=os.getenv("SENTRY_ENV"),
     send_default_pii=True,
 )
 
