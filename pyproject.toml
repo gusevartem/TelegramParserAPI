@@ -1,0 +1,24 @@
+[tool.poetry]
+name = "parser"
+version = "0.1.0"
+description = ""
+authors = ["ycalk <alosev752@gmail.com>"]
+package-mode = false
+packages = [
+    {include = "parser/api",from = "bases"},
+    {include = "parser/persistence",from = "components"},
+    {include = "parser/settings",from = "components"},
+]
+
+[tool.poetry.dependencies]
+python = "^3.12"
+fastapi = {version = "^0.128.0", extras = ["standard"]}
+pydantic-settings = "^2.12.0"
+dishka = {extras = ["fastapi"], version = "^1.7.2"}
+sqlalchemy = {extras = ["asyncio"], version = "^2.0.45"}
+asyncpg = "^0.31.0"
+
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
