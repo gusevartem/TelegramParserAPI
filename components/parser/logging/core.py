@@ -1,10 +1,10 @@
 import logging
 import sys
-from typing import override
+from typing import Final, override
 
 from parser.settings import Settings
 
-COLORED_LEVELS = {
+COLORED_LEVELS: Final[dict[int, str]] = {
     logging.DEBUG: "\033[36mDEBUG\033[0m",
     logging.INFO: "\033[32mINFO\033[0m",
     logging.WARNING: "\033[33mWARNING\033[0m",

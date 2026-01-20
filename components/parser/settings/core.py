@@ -15,8 +15,17 @@ class Settings(BaseSettings):
 
     debug: bool = False
 
+    postgres_user: str | None = None
+    postgres_password: str | None = None
+    postgres_host: str | None = None
+    postgres_port: int | None = None
+    postgres_db: str | None = None
+
+    postgres_pool_size: int = 10
+    postgres_max_overflow: int = 20
+
 
 class SettingsProvider(Provider):
     @provide(scope=Scope.APP)
-    def get_settings(self) -> Settings:
-        return Settings()
+    def settings(self) -> Settings:
+        return Settings()  # type: ignore # pyright: ignore

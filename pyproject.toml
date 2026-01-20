@@ -8,6 +8,7 @@ packages = [
     {include = "parser/api",from = "bases"},
     {include = "parser/persistence",from = "components"},
     {include = "parser/settings",from = "components"},
+    {include = "parser/logging",from = "components"},
 ]
 
 [tool.poetry.dependencies]
@@ -22,3 +23,9 @@ asyncpg = "^0.31.0"
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
 build-backend = "poetry.core.masonry.api"
+
+[tool.poetry.group.dev.dependencies]
+aiosqlite = {version = ">=0.22.1,<0.23.0"}
+
+[tool.poetry.group.migrations.dependencies]
+alembic = {version = ">=1.18.1,<2.0.0"}
