@@ -1,7 +1,7 @@
 from hmac import compare_digest
 from typing import Self
 
-from dishka.integrations.fastapi import FromDishka
+from dishka.integrations.fastapi import FromDishka, inject
 from fastapi import Depends, status
 from fastapi.security import APIKeyHeader
 from fastapi.security.utils import get_authorization_scheme_param
@@ -61,6 +61,7 @@ security = APIKeyHeader(
 )
 
 
+@inject
 def secret_key_check(
     api_settings: FromDishka[APISettings], header_value: str = Depends(security)
 ) -> None:

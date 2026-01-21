@@ -4,6 +4,8 @@ from .models import (
     ChannelDAO,
     ChannelMessage,
     ChannelMessageDAO,
+    ChannelMessageStatistic,
+    ChannelMessageStatisticDAO,
     ChannelStatistic,
     ChannelStatisticDAO,
     Media,
@@ -21,6 +23,8 @@ __all__ = [
     "ChannelDAO",
     "Media",
     "MediaDAO",
+    "ChannelMessageStatistic",
+    "ChannelMessageStatisticDAO",
     "PersistenceProvider",
     "register_model",
 ]

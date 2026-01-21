@@ -12,6 +12,7 @@ from parser.persistence import PersistenceProvider
 from parser.settings import ProjectSettings, ProjectSettingsProvider
 from uvicorn import Config, Server
 
+from .routers import parser_router, public_router
 from .settings import APISettings, APISettingsProvider
 from .utils import CustomHTTPException, ErrorResponse
 
@@ -57,8 +58,8 @@ async def build_app() -> FastAPI:
         request: Request, exc: CustomHTTPException
     ) -> JSONResponse:
         error_response = ErrorResponse(error=exc.error, message=exc.message)
-
-        logger.warning(
+        logger.log(
+            40 if exc.status_code >= 500 else 30,
             f"Custom HTTP exception: {exc.error} - {exc.message}",
             extra={
                 "exception_type": exc.error,
@@ -68,8 +69,13 @@ async def build_app() -> FastAPI:
         )
 
         return JSONResponse(
-            status_code=exc.status_code, content=error_response.model_dump()
+            status_code=exc.status_code,
+            content=error_response.model_dump(),
+            headers=exc.headers,
         )
+
+    app.include_router(parser_router, prefix=api_settings.methods_prefix)
+    app.include_router(public_router, prefix=api_settings.api_prefix)
 
     return app
 

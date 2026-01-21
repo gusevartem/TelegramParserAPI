@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import override
+from typing import Any, override
 from uuid import UUID, uuid4
 
-from sqlalchemy import String, func
+from sqlalchemy import String, event, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -33,3 +33,8 @@ class MediaDAO(BaseDAO[Media, UUID]):
         )
         await self.save(new_media)
         return new_media
+
+
+@event.listens_for(Media, "before_update")
+def receive_before_update(_mapper: Any, _connection: Any, _target: Any) -> None:
+    raise RuntimeError("Media records are immutable and cannot be updated.")

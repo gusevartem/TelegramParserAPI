@@ -40,7 +40,7 @@ class ChannelStatisticDAO(BaseDAO[ChannelStatistic, UUID]):
         self, channel: Channel, subscribers_count: int, views: int, posts_count: int
     ) -> ChannelStatistic:
         new_statistic = ChannelStatistic(
-            channel_id=channel.id,
+            channel=channel,
             subscribers_count=subscribers_count,
             views=views,
             posts_count=posts_count,

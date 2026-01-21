@@ -10,6 +10,7 @@ packages = [
     {include = "parser/settings",from = "components"},
     {include = "parser/logging",from = "components"},
     {include = "parser/migrator",from = "bases"},
+    {include = "parser/dto",from = "components"},
 ]
 
 [tool.poetry.dependencies]

@@ -12,7 +12,13 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 
-from .models import ChannelDAO, ChannelMessageDAO, ChannelStatisticDAO, MediaDAO
+from .models import (
+    ChannelDAO,
+    ChannelMessageDAO,
+    ChannelMessageStatisticDAO,
+    ChannelStatisticDAO,
+    MediaDAO,
+)
 from .models._base import BaseModel
 from .settings import PersistenceSettings
 
@@ -23,12 +29,20 @@ def register_model() -> list[type]:
     from .models import (
         Channel,
         ChannelMessage,
+        ChannelMessageStatistic,
         ChannelStatistic,
         Media,
         MessageMediaLink,
     )
 
-    return [Channel, ChannelMessage, MessageMediaLink, ChannelStatistic, Media]
+    return [
+        Channel,
+        ChannelMessage,
+        MessageMediaLink,
+        ChannelStatistic,
+        Media,
+        ChannelMessageStatistic,
+    ]
 
 
 class PersistenceProvider(Provider):
@@ -115,5 +129,6 @@ class PersistenceProvider(Provider):
         ChannelMessageDAO,
         ChannelStatisticDAO,
         MediaDAO,
+        ChannelMessageStatisticDAO,
         scope=Scope.REQUEST,
     )

@@ -13,6 +13,7 @@ from ._base import BaseDAO, BaseModel
 
 if TYPE_CHECKING:
     from .channel import Channel
+    from .channel_message_statistic import ChannelMessageStatistic
     from .media import Media
 
 
@@ -37,6 +38,9 @@ class ChannelMessage(BaseModel):
     )
     media: AssociationProxy[list[Media]] = association_proxy(
         "media_links", "media_item"
+    )
+    statistics: Mapped[list[ChannelMessageStatistic]] = relationship(
+        back_populates="message", cascade="all, delete-orphan", passive_deletes=True
     )
 
 
