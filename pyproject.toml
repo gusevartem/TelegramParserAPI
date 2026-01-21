@@ -9,6 +9,7 @@ packages = [
     {include = "parser/persistence",from = "components"},
     {include = "parser/settings",from = "components"},
     {include = "parser/logging",from = "components"},
+    {include = "parser/migrator",from = "bases"},
 ]
 
 [tool.poetry.dependencies]
@@ -17,7 +18,8 @@ fastapi = {version = "^0.128.0", extras = ["standard"]}
 pydantic-settings = "^2.12.0"
 dishka = {extras = ["fastapi"], version = "^1.7.2"}
 sqlalchemy = {extras = ["asyncio"], version = "^2.0.45"}
-asyncpg = "^0.31.0"
+asyncmy = "^0.2.11"
+cryptography = "^46.0.3"
 
 
 [build-system]

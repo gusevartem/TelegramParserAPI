@@ -19,7 +19,7 @@ class ChannelStatistic(BaseModel):
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
     channel_id: Mapped[int] = mapped_column(
-        ForeignKey(Channel.id, ondelete="CASCADE"), index=True
+        ForeignKey("channel.id", ondelete="CASCADE"), index=True
     )
 
     subscribers_count: Mapped[int] = mapped_column()

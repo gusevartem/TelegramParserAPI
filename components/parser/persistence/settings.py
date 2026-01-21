@@ -1,10 +1,9 @@
 from typing import ClassVar
 
-from dishka import Provider, Scope, provide
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
-class ProjectSettings(BaseSettings):
+class PersistenceSettings(BaseSettings):
     model_config: ClassVar[SettingsConfigDict] = SettingsConfigDict(
         frozen=True,
         env_file=".env",
@@ -13,10 +12,11 @@ class ProjectSettings(BaseSettings):
         extra="ignore",
     )
 
-    debug: bool = False
+    mysql_user: str | None = None
+    mysql_password: str | None = None
+    mysql_host: str | None = None
+    mysql_port: int | None = None
+    mysql_database: str | None = None
 
-
-class ProjectSettingsProvider(Provider):
-    @provide(scope=Scope.APP)
-    def settings(self) -> ProjectSettings:
-        return ProjectSettings()  # type: ignore # pyright: ignore
+    mysql_pool_size: int = 10
+    mysql_max_overflow: int = 20

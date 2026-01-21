@@ -4,7 +4,7 @@ from typing import NewType
 
 from dishka import Provider, Scope, provide, provide_all
 from dishka.dependency_source import CompositeDependencySource
-from parser.settings import Settings
+from parser.settings import ProjectSettings
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import (
 
 from .models import ChannelDAO, ChannelMessageDAO, ChannelStatisticDAO, MediaDAO
 from .models._base import BaseModel
+from .settings import PersistenceSettings
 
 DatabaseUrl = NewType("DatabaseUrl", str)
 
@@ -32,8 +33,16 @@ def register_model() -> list[type]:
 
 class PersistenceProvider(Provider):
     @provide(scope=Scope.APP)
-    def database_url(self, settings: Settings) -> DatabaseUrl:
-        if settings.debug:
+    def settings(self) -> PersistenceSettings:
+        return PersistenceSettings()
+
+    @provide(scope=Scope.APP)
+    def database_url(
+        self,
+        project_settings: ProjectSettings,
+        persistence_settings: PersistenceSettings,
+    ) -> DatabaseUrl:
+        if project_settings.debug:
             url = "sqlite+aiosqlite:///:memory:"
             logger = getLogger(__name__)
             logger.info("⚠️  DEBUG MODE: Using in-memory SQLite database")
@@ -41,38 +50,41 @@ class PersistenceProvider(Provider):
             if any(
                 parameter is None
                 for parameter in (
-                    settings.postgres_user,
-                    settings.postgres_password,
-                    settings.postgres_host,
-                    settings.postgres_port,
-                    settings.postgres_db,
+                    persistence_settings.mysql_user,
+                    persistence_settings.mysql_password,
+                    persistence_settings.mysql_host,
+                    persistence_settings.mysql_port,
+                    persistence_settings.mysql_database,
                 )
             ):
-                raise ValueError(
-                    "PostgreSQL settings must be provided in non-debug mode"
-                )
+                raise ValueError("MySQL settings must be provided in non-debug mode")
             url = (
-                f"postgresql+asyncpg://{settings.postgres_user}:{settings.postgres_password}"
-                + f"@{settings.postgres_host}:{settings.postgres_port}"
-                + f"/{settings.postgres_db}"
+                f"mysql+asyncmy://{persistence_settings.mysql_user}"
+                + f":{persistence_settings.mysql_password}"
+                + f"@{persistence_settings.mysql_host}"
+                + f":{persistence_settings.mysql_port}"
+                + f"/{persistence_settings.mysql_database}"
             )
         return DatabaseUrl(url)
 
     @provide(scope=Scope.APP)
     async def engine(
-        self, database_url: DatabaseUrl, settings: Settings
+        self,
+        database_url: DatabaseUrl,
+        persistence_settings: PersistenceSettings,
+        project_settings: ProjectSettings,
     ) -> AsyncIterable[AsyncEngine]:
         register_model()
         logger = getLogger(__name__)
         engine = create_async_engine(
             database_url,
             echo=False,
-            pool_size=settings.postgres_pool_size,
-            max_overflow=settings.postgres_max_overflow,
+            pool_size=persistence_settings.mysql_pool_size,
+            max_overflow=persistence_settings.mysql_max_overflow,
             pool_pre_ping=True,
         )
         logger.info("Database engine created")
-        if settings.debug:
+        if project_settings.debug:
             logger.info("⚠️  DEBUG MODE: Creating all tables in the database")
             async with engine.begin() as conn:
                 await conn.run_sync(BaseModel.metadata.create_all)

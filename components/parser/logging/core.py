@@ -2,7 +2,7 @@ import logging
 import sys
 from typing import Final, override
 
-from parser.settings import Settings
+from parser.settings import ProjectSettings
 
 COLORED_LEVELS: Final[dict[int, str]] = {
     logging.DEBUG: "\033[36mDEBUG\033[0m",
@@ -22,7 +22,7 @@ class ColorFormatter(logging.Formatter):
         return super().formatMessage(record)
 
 
-def setup_logging(settings: Settings):
+def setup_logging(settings: ProjectSettings):
     log_level = logging.DEBUG if settings.debug else logging.INFO
 
     log_format = (

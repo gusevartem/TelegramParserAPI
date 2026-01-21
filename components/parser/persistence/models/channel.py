@@ -25,7 +25,7 @@ class Channel(BaseModel):
     name: Mapped[str] = mapped_column(String(255))
     description: Mapped[str | None] = mapped_column(Text, default=None)
     logo_id: Mapped[UUID | None] = mapped_column(
-        ForeignKey(Media.id, ondelete="SET NULL"), default=None
+        ForeignKey("media.id", ondelete="SET NULL"), default=None
     )
 
     recorded_at: Mapped[datetime] = mapped_column(server_default=func.now())

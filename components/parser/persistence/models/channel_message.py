@@ -23,7 +23,7 @@ class ChannelMessage(BaseModel):
     created_at: Mapped[datetime] = mapped_column()
     text: Mapped[str] = mapped_column(Text)
     channel_id: Mapped[int] = mapped_column(
-        ForeignKey(Channel.id, ondelete="CASCADE"), index=True
+        ForeignKey("channel.id", ondelete="CASCADE"), index=True
     )
 
     recorded_at: Mapped[datetime] = mapped_column(server_default=func.now())
@@ -61,10 +61,12 @@ class ChannelMessageDAO(BaseDAO[ChannelMessage, int]):
 class MessageMediaLink(BaseModel):
     __tablename__: str = "message_media_link"
 
-    message_id: Mapped[int] = mapped_column(
-        ForeignKey(ChannelMessage.id, ondelete="CASCADE"), primary_key=True
+    media_id: Mapped[UUID] = mapped_column(
+        ForeignKey("media.id", ondelete="CASCADE"), primary_key=True
     )
-    media_id: Mapped[UUID] = mapped_column(ForeignKey(Media.id, ondelete="CASCADE"))
+    message_id: Mapped[int] = mapped_column(
+        ForeignKey("channel_message.id", ondelete="CASCADE"),
+    )
 
     message: Mapped[ChannelMessage] = relationship(back_populates="media_links")
     media_item: Mapped[Media] = relationship()

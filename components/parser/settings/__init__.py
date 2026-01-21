@@ -1,3 +1,3 @@
-from parser.settings.core import Settings, SettingsProvider
+from parser.settings.core import ProjectSettings, ProjectSettingsProvider
 
-__all__ = ["Settings", "SettingsProvider"]
+__all__ = ["ProjectSettings", "ProjectSettingsProvider"]
