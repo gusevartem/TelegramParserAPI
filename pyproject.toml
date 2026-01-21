@@ -31,3 +31,7 @@ aiosqlite = {version = ">=0.22.1,<0.23.0"}
 
 [tool.poetry.group.migrations.dependencies]
 alembic = {version = ">=1.18.1,<2.0.0"}
+
+[tool.poetry.scripts]
+alembic = "parser.migrator:run"
+test = "development.test:test"
