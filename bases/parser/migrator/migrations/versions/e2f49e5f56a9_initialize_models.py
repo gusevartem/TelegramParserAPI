@@ -36,7 +36,7 @@ def upgrade() -> None:
     )
     op.create_table(
         "channel",
-        sa.Column("id", sa.Integer(), autoincrement=False, nullable=False),
+        sa.Column("id", sa.BigInteger(), autoincrement=False, nullable=False),
         sa.Column("link", sa.String(length=255), nullable=False),
         sa.Column("name", sa.String(length=255), nullable=False),
         sa.Column("description", sa.Text(), nullable=True),
@@ -56,10 +56,10 @@ def upgrade() -> None:
     op.create_index(op.f("ix_channel_link"), "channel", ["link"], unique=True)
     op.create_table(
         "channel_message",
-        sa.Column("id", sa.Integer(), autoincrement=False, nullable=False),
+        sa.Column("id", sa.BigInteger(), autoincrement=False, nullable=False),
         sa.Column("created_at", sa.DateTime(), nullable=False),
         sa.Column("text", sa.Text(), nullable=False),
-        sa.Column("channel_id", sa.Integer(), nullable=False),
+        sa.Column("channel_id", sa.BigInteger(), nullable=False),
         sa.Column(
             "recorded_at",
             sa.DateTime(),
@@ -81,7 +81,7 @@ def upgrade() -> None:
     op.create_table(
         "channel_statistic",
         sa.Column("id", sa.Uuid(), nullable=False),
-        sa.Column("channel_id", sa.Integer(), nullable=False),
+        sa.Column("channel_id", sa.BigInteger(), nullable=False),
         sa.Column("subscribers_count", sa.Integer(), nullable=False),
         sa.Column("views", sa.Integer(), nullable=False),
         sa.Column("posts_count", sa.Integer(), nullable=False),
@@ -103,7 +103,7 @@ def upgrade() -> None:
     op.create_table(
         "message_media_link",
         sa.Column("media_id", sa.Uuid(), nullable=False),
-        sa.Column("message_id", sa.Integer(), nullable=False),
+        sa.Column("message_id", sa.BigInteger(), nullable=False),
         sa.ForeignKeyConstraint(["media_id"], ["media.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(
             ["message_id"], ["channel_message.id"], ondelete="CASCADE"

@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Literal, override
 from uuid import UUID
 
-from sqlalchemy import ForeignKey, Text, func, select
+from sqlalchemy import ForeignKey, Text, func, select, BigInteger
 from sqlalchemy.ext.associationproxy import AssociationProxy, association_proxy
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column, relationship, selectinload
@@ -20,7 +20,7 @@ if TYPE_CHECKING:
 class ChannelMessage(BaseModel):
     __tablename__: str = "channel_message"
 
-    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=False)
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=False)
     created_at: Mapped[datetime] = mapped_column()
     text: Mapped[str] = mapped_column(Text)
     channel_id: Mapped[int] = mapped_column(

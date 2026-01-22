@@ -6,6 +6,12 @@ from .channel_message_statistic import (
 )
 from .channel_statistic import ChannelStatistic, ChannelStatisticDAO
 from .media import Media, MediaDAO
+from .telegram_client import (
+    TelegramClient,
+    TelegramClientDAO,
+    TelegramClientProxy,
+    ProxyType,
+)
 
 __all__ = [
     "ChannelMessage",
@@ -19,4 +25,8 @@ __all__ = [
     "ChannelDAO",
     "Media",
     "MediaDAO",
+    "TelegramClient",
+    "TelegramClientDAO",
+    "TelegramClientProxy",
+    "ProxyType",
 ]

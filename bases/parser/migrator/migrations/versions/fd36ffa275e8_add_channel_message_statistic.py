@@ -24,7 +24,7 @@ def upgrade() -> None:
     op.create_table(
         "channel_message_statistic",
         sa.Column("id", sa.Uuid(), nullable=False),
-        sa.Column("message_id", sa.Integer(), nullable=False),
+        sa.Column("message_id", sa.BigInteger(), nullable=False),
         sa.Column("views", sa.Integer(), nullable=False),
         sa.Column(
             "recorded_at",

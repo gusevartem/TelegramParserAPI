@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING, override
 from uuid import UUID
 
-from sqlalchemy import ForeignKey, String, Text, func, select
+from sqlalchemy import ForeignKey, String, Text, func, select, BigInteger
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, joinedload, mapped_column, relationship
 
@@ -19,7 +19,7 @@ if TYPE_CHECKING:
 class Channel(BaseModel):
     __tablename__: str = "channel"
 
-    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=False)
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=False)
 
     link: Mapped[str] = mapped_column(String(255), unique=True, index=True)
     name: Mapped[str] = mapped_column(String(255))
@@ -53,10 +53,10 @@ class ChannelDAO(BaseDAO[Channel, int]):
         link: str,
         name: str,
         description: str | None = None,
-        logo: UUID | None = None,
+        logo: Media | None = None,
     ) -> Channel:
         new_channel = Channel(
-            id=id, link=link, name=name, description=description, logo_id=logo
+            id=id, link=link, name=name, description=description, logo=logo
         )
         await self.save(new_channel)
         return new_channel

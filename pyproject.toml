@@ -28,6 +28,7 @@ filetype = "^1.2.0"
 pyqt6 = "^6.10.2"
 tgcrypto = "^1.2.5"
 telethon = "^1.42.0"
+pysocks = "^1.7.1"
 
 
 [build-system]
