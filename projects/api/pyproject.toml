@@ -11,6 +11,7 @@ packages = [
     {include = "parser/logging",from = "../../components"},
     {include = "parser/settings",from = "../../components"},
     {include = "parser/dto",from = "../../components"},
+    {include = "parser/storage",from = "../../components"},
 ]
 
 [tool.poetry.dependencies]
@@ -21,6 +22,7 @@ dishka = {extras = ["fastapi"], version = "^1.7.2"}
 sqlalchemy = {extras = ["asyncio"], version = "^2.0.45"}
 asyncmy = "^0.2.11"
 cryptography = "^46.0.3"
+aioboto3 = "^15.5.0"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]

@@ -10,6 +10,7 @@ from fastapi.responses import JSONResponse
 from parser.logging import setup_logging
 from parser.persistence import PersistenceProvider
 from parser.settings import ProjectSettings, ProjectSettingsProvider
+from parser.storage import StorageProvider
 from uvicorn import Config, Server
 
 from .routers import parser_router, public_router
@@ -25,7 +26,10 @@ async def lifespan(app: FastAPI):
 
 async def build_app() -> FastAPI:
     container = make_async_container(
-        APISettingsProvider(), PersistenceProvider(), ProjectSettingsProvider()
+        APISettingsProvider(),
+        PersistenceProvider(),
+        ProjectSettingsProvider(),
+        StorageProvider(),
     )
 
     api_settings = await container.get(APISettings)
