@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import TYPE_CHECKING, Any, override
+from typing import TYPE_CHECKING, Any, Literal, override
 from uuid import UUID, uuid4
 
-from sqlalchemy import ForeignKey, event, func
+from sqlalchemy import ForeignKey, event, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -47,6 +47,43 @@ class ChannelStatisticDAO(BaseDAO[ChannelStatistic, UUID]):
         )
         await self.save(new_statistic)
         return new_statistic
+
+    async def get_latest_by_channel_id(
+        self, channel_id: int
+    ) -> ChannelStatistic | None:
+        stmt = (
+            select(ChannelStatistic)
+            .where(ChannelStatistic.channel_id == channel_id)
+            .order_by(ChannelStatistic.recorded_at.desc())
+            .limit(1)
+        )
+
+        result = await self._session.execute(stmt)
+        return result.scalars().first()
+
+    async def get_channel_statistics(
+        self,
+        channel_id: int,
+        sorting: Literal["newest", "oldest"],
+        skip: int,
+        limit: int | None,
+    ) -> list[ChannelStatistic]:
+        stmt = (
+            select(ChannelStatistic)
+            .where(ChannelStatistic.channel_id == channel_id)
+            .offset(skip)
+        )
+
+        if sorting == "newest":
+            stmt = stmt.order_by(ChannelStatistic.recorded_at.desc())
+        else:
+            stmt = stmt.order_by(ChannelStatistic.recorded_at.asc())
+
+        if limit is not None:
+            stmt = stmt.limit(limit)
+
+        result = await self._session.execute(stmt)
+        return list(result.scalars().all())
 
 
 @event.listens_for(ChannelStatistic, "before_update")

@@ -4,9 +4,9 @@ from datetime import datetime
 from typing import TYPE_CHECKING, override
 from uuid import UUID
 
-from sqlalchemy import ForeignKey, String, Text, func
+from sqlalchemy import ForeignKey, String, Text, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, joinedload, mapped_column, relationship
 
 from ._base import BaseDAO, BaseModel
 
@@ -60,3 +60,19 @@ class ChannelDAO(BaseDAO[Channel, int]):
         )
         await self.save(new_channel)
         return new_channel
+
+    async def find_by_id_with_loaded_logo(self, channel_id: int) -> Channel | None:
+        stmt = (
+            select(Channel)
+            .options(joinedload(Channel.logo))
+            .where(Channel.id == channel_id)
+        )
+
+        result = await self._session.execute(stmt)
+        return result.unique().scalars().first()
+
+    async def get_ids(self) -> list[int]:
+        stmt = select(Channel.id)
+
+        result = await self._session.execute(stmt)
+        return list(result.scalars().all())

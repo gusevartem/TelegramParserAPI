@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import TYPE_CHECKING, override
+from typing import TYPE_CHECKING, Literal, override
 from uuid import UUID
 
-from sqlalchemy import ForeignKey, Text, func
+from sqlalchemy import ForeignKey, Text, func, select
 from sqlalchemy.ext.associationproxy import AssociationProxy, association_proxy
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column, relationship, selectinload
 
 from ._base import BaseDAO, BaseModel
 
@@ -60,6 +60,53 @@ class ChannelMessageDAO(BaseDAO[ChannelMessage, int]):
         )
         await self.save(new_message)
         return new_message
+
+    async def get_channel_messages(
+        self,
+        channel_id: int,
+        sorting: Literal["newest", "oldest"],
+        skip: int,
+        limit: int | None,
+    ) -> list[ChannelMessage]:
+        stmt = (
+            select(ChannelMessage)
+            .where(ChannelMessage.channel_id == channel_id)
+            .options(
+                selectinload(ChannelMessage.statistics),
+                selectinload(ChannelMessage.media_links).joinedload(
+                    MessageMediaLink.media_item
+                ),
+            )
+            .offset(skip)
+        )
+
+        if sorting == "newest":
+            stmt = stmt.order_by(ChannelMessage.created_at.desc())
+        else:
+            stmt = stmt.order_by(ChannelMessage.created_at.asc())
+
+        if limit is not None:
+            stmt = stmt.limit(limit)
+
+        result = await self._session.execute(stmt)
+        return list(result.scalars().all())
+
+    async def find_with_loaded_statistics_and_media(
+        self, message_id: int
+    ) -> ChannelMessage | None:
+        stmt = (
+            select(ChannelMessage)
+            .options(
+                selectinload(ChannelMessage.statistics),
+                selectinload(ChannelMessage.media_links).joinedload(
+                    MessageMediaLink.media_item
+                ),
+            )
+            .where(ChannelMessage.id == message_id)
+        )
+
+        result = await self._session.execute(stmt)
+        return result.scalars().first()
 
 
 class MessageMediaLink(BaseModel):

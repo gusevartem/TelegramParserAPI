@@ -52,6 +52,10 @@ async def build_app() -> FastAPI:
                 "model": ErrorResponse,
                 "description": "Токен не валиден",
             },
+            status.HTTP_500_INTERNAL_SERVER_ERROR: {
+                "model": ErrorResponse,
+                "description": "Внутренняя ошибка сервера",
+            },
         },
     )
 
@@ -76,6 +80,25 @@ async def build_app() -> FastAPI:
             status_code=exc.status_code,
             content=error_response.model_dump(),
             headers=exc.headers,
+        )
+
+    @app.exception_handler(Exception)
+    async def all_exception_handler(  # pyright: ignore[reportUnusedFunction]
+        request: Request, exc: Exception
+    ) -> JSONResponse:
+        error_response = ErrorResponse(error=exc.__class__.__name__, message=str(exc))
+        logger.error(
+            f"Unhandled exception: {error_response.error} - {error_response.message}",
+            extra={
+                "exception_type": error_response.error,
+                "path": request.url.path,
+                "method": request.method,
+            },
+        )
+
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content=error_response.model_dump(),
         )
 
     app.include_router(parser_router, prefix=api_settings.methods_prefix)

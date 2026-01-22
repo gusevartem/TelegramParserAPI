@@ -17,6 +17,7 @@ class Media(BaseModel):
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
     mime_type: Mapped[str] = mapped_column(String(255))
     size_bytes: Mapped[int] = mapped_column()
+    file_name: Mapped[str] = mapped_column(String(255))
 
     recorded_at: Mapped[datetime] = mapped_column(server_default=func.now())
 
