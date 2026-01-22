@@ -12,6 +12,7 @@ packages = [
     {include = "parser/migrator",from = "bases"},
     {include = "parser/dto",from = "components"},
     {include = "parser/storage",from = "components"},
+    {include = "parser/opentele",from = "components"},
 ]
 
 [tool.poetry.dependencies]
@@ -24,6 +25,9 @@ asyncmy = "^0.2.11"
 cryptography = "^46.0.3"
 aioboto3 = "^15.5.0"
 filetype = "^1.2.0"
+pyqt6 = "^6.10.2"
+tgcrypto = "^1.2.5"
+telethon = "^1.42.0"
 
 
 [build-system]
