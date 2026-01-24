@@ -22,8 +22,6 @@ PLAIN_LEVELS: Final[dict[int, str]] = {
 
 
 class ColorFormatter(logging.Formatter):
-    """Только для консоли с цветами."""
-
     @override
     def formatMessage(self, record: logging.LogRecord) -> str:
         field = COLORED_LEVELS.get(record.levelno, record.levelname)
@@ -32,8 +30,6 @@ class ColorFormatter(logging.Formatter):
 
 
 class PlainFormatter(logging.Formatter):
-    """Только для файлов без цветов."""
-
     @override
     def formatMessage(self, record: logging.LogRecord) -> str:
         field = PLAIN_LEVELS.get(record.levelno, record.levelname)
