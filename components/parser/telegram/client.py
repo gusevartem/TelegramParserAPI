@@ -1,8 +1,9 @@
 import time
-from collections.abc import Callable, Coroutine
+from collections.abc import AsyncIterator, Callable, Coroutine
+from contextlib import contextmanager
 from functools import wraps as functools_wraps
 from logging import Logger, getLogger
-from types import TracebackType
+from types import CoroutineType, TracebackType
 from typing import Any, ParamSpec, Protocol, Self, TypeVar, override
 
 from parser.dto import ProxySettings, TelegramCredentials
@@ -18,10 +19,9 @@ from telethon.hints import (
     FileLike,
     MessageLike,
 )
-from telethon.requestiter import RequestIter
 from telethon.sessions.abstract import Session
 from telethon.tl import TLObject
-from telethon.types import TypePhotoSize, User
+from telethon.types import Message, TypePhotoSize, User
 
 from .exceptions import ClientBanned, FloodWait
 
@@ -29,23 +29,41 @@ P = ParamSpec("P")
 T = TypeVar("T")
 
 
+@contextmanager
+def _telethon_exception_handler():
+    try:
+        yield
+    except errors.FloodWaitError as e:
+        raise FloodWait(seconds=e.seconds, message=str(e)) from e
+    except (
+        errors.UserDeactivatedError,
+        errors.UserBannedInChannelError,
+        errors.AuthKeyDuplicatedError,
+        errors.SessionRevokedError,
+        errors.AuthKeyUnregisteredError,
+    ) as e:
+        raise ClientBanned(f"Client banned or invalid: {str(e)}") from e
+
+
 def handle_telethon_errors(
     func: Callable[P, Coroutine[Any, Any, T]],
-) -> Callable[P, Coroutine[Any, Any, T]]:
+) -> Callable[P, CoroutineType[Any, Any, T]]:
     @functools_wraps(func)
     async def wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
-        try:
+        with _telethon_exception_handler():
             return await func(*args, **kwargs)
-        except errors.FloodWaitError as e:
-            raise FloodWait(seconds=e.seconds, message=str(e)) from e
-        except (
-            errors.UserDeactivatedError,
-            errors.UserBannedInChannelError,
-            errors.AuthKeyDuplicatedError,
-            errors.SessionRevokedError,
-            errors.AuthKeyUnregisteredError,
-        ) as e:
-            raise ClientBanned(f"Client banned or invalid: {str(e)}") from e
+
+    return wrapper  # type: ignore
+
+
+def handle_telethon_errors_generator(
+    func: Callable[P, AsyncIterator[T]],
+) -> Callable[P, AsyncIterator[T]]:
+    @functools_wraps(func)
+    async def wrapper(*args: P.args, **kwargs: P.kwargs) -> AsyncIterator[T]:
+        with _telethon_exception_handler():
+            async for item in func(*args, **kwargs):
+                yield item
 
     return wrapper
 
@@ -69,7 +87,7 @@ class ITelegramClient(Protocol):
         *,
         offset_date: DateLike = None,
         search: str | None = None,
-    ) -> RequestIter: ...
+    ) -> AsyncIterator[Message]: ...
     async def download_media(
         self,
         message: MessageLike,
@@ -131,6 +149,12 @@ class TelegramClient(ITelegramClient):
             **telethon_kwargs
         )
 
+    @property
+    def current_session(self) -> Session:
+        if not isinstance(self._telethon_client.session, Session):  # pyright: ignore
+            raise RuntimeError("Unexpected session type")
+        return self._telethon_client.session
+
     @override
     @handle_telethon_errors
     async def __aenter__(self) -> Self:
@@ -140,7 +164,7 @@ class TelegramClient(ITelegramClient):
         await self._telethon_client.connect()
         if not await self._telethon_client.is_user_authorized():
             raise ClientBanned("Client is not authorized (session invalid or revoked)")
-            
+
         duration = (time.perf_counter() - start_time) * 1000
 
         self.logger.info(f"✅ Telegram client started. Duration: {duration:.0f}ms")
@@ -162,6 +186,7 @@ class TelegramClient(ITelegramClient):
         self.logger.info(f"✅ Telegram client disconnected. Duration: {duration:.0f}ms")
 
     @override
+    @handle_telethon_errors
     async def __call__(self, request: TLObject) -> Any | list[Any]:
         self.logger.info(f"⌛ Sending tl request: {type(request).__name__}")
 
@@ -176,6 +201,7 @@ class TelegramClient(ITelegramClient):
         return result
 
     @override
+    @handle_telethon_errors
     async def get_me(self) -> User:
         self.logger.info("⌛ Getting me")
 
@@ -195,6 +221,7 @@ class TelegramClient(ITelegramClient):
         return user
 
     @override
+    @handle_telethon_errors
     async def get_entity(self, entity: EntitiesLike) -> Entity | list[Entity]:
         self.logger.info(f"⌛ Getting entity: {entity} ({type(entity).__name__})")
 
@@ -209,23 +236,26 @@ class TelegramClient(ITelegramClient):
         return result
 
     @override
-    def iter_messages(
+    @handle_telethon_errors_generator
+    async def iter_messages(
         self,
         entity: EntityLike,
-        limit: float | None = None,
+        limit: int | None = None,
         *,
         offset_date: DateLike = None,
         search: str | None = None,
-    ) -> RequestIter:
+    ) -> AsyncIterator[Message]:
         self.logger.info(f"⌛ Iterating messages for entity: {type(entity).__name__}")
-        return self._telethon_client.iter_messages(
+        async for message in self._telethon_client.iter_messages(
             entity,
-            limit,  # pyright: ignore[reportArgumentType]
+            limit,  # pyright: ignore[reportArgumentType] Ошибка в telethon, очевидно, что limit - это int, а не float
             offset_date=offset_date,
             search=search,  # pyright: ignore[reportArgumentType]
-        )
+        ):
+            yield message
 
     @override
+    @handle_telethon_errors
     async def download_media(
         self,
         message: MessageLike,
@@ -250,6 +280,7 @@ class TelegramClient(ITelegramClient):
         return result
 
     @override
+    @handle_telethon_errors
     async def download_profile_photo(
         self,
         entity: EntityLike,
