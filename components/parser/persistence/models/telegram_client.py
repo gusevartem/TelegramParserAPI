@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 from datetime import datetime
+from enum import StrEnum
 from typing import override
 from uuid import UUID, uuid4
-from enum import StrEnum
 
-from sqlalchemy import ForeignKey, String, func, BigInteger
+from sqlalchemy import BigInteger, ForeignKey, String, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -28,7 +28,6 @@ class TelegramClient(BaseModel):
     app_version: Mapped[str] = mapped_column(String(50))
     lang_code: Mapped[str] = mapped_column(String(10))
     system_lang_code: Mapped[str] = mapped_column(String(10))
-    lang_pack: Mapped[str] = mapped_column(String(255))
 
     recorded_at: Mapped[datetime] = mapped_column(server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
@@ -77,9 +76,9 @@ class TelegramClientDAO(BaseDAO[TelegramClient, int]):
 
 
 class ProxyType(StrEnum):
-    HTTP = "HTTP"
-    SOCKS4 = "SOCKS4"
-    SOCKS5 = "SOCKS5"
+    HTTP = "http"
+    SOCKS4 = "socks4"
+    SOCKS5 = "socks5"
 
 
 class TelegramClientProxy(BaseModel):

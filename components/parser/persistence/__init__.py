@@ -11,10 +11,10 @@ from .models import (
     Media,
     MediaDAO,
     MessageMediaLink,
-    TelegramClientProxy,
+    ProxyType,
     TelegramClient,
     TelegramClientDAO,
-    ProxyType,
+    TelegramClientProxy,
 )
 
 __all__ = [

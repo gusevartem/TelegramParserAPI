@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING, override
 from uuid import UUID
 
-from sqlalchemy import ForeignKey, String, Text, func, select, BigInteger
+from sqlalchemy import BigInteger, ForeignKey, String, Text, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, joinedload, mapped_column, relationship
 

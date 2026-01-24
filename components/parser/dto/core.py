@@ -17,6 +17,7 @@ from parser.persistence import (
 from parser.persistence import (
     Media as MediaPersistence,
 )
+from parser.persistence import ProxyType
 from pydantic import BaseModel
 
 
@@ -125,3 +126,21 @@ class ChannelMessage(BaseModel):
             recorded_at=int(message.recorded_at.timestamp()),
             updated_at=int(message.updated_at.timestamp()),
         )
+
+
+class TelegramCredentials(BaseModel):
+    api_id: int
+    api_hash: str
+    device_model: str
+    system_version: str
+    app_version: str
+    lang_code: str
+    system_lang_code: str
+
+
+class ProxySettings(BaseModel):
+    proxy_type: ProxyType
+    host: str
+    port: int
+    username: str | None
+    password: str | None

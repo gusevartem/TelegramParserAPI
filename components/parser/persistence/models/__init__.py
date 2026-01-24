@@ -7,10 +7,10 @@ from .channel_message_statistic import (
 from .channel_statistic import ChannelStatistic, ChannelStatisticDAO
 from .media import Media, MediaDAO
 from .telegram_client import (
+    ProxyType,
     TelegramClient,
     TelegramClientDAO,
     TelegramClientProxy,
-    ProxyType,
 )
 
 __all__ = [
