@@ -1,3 +1,4 @@
+import time
 from logging import getLogger
 from typing import Literal
 from uuid import UUID
@@ -39,7 +40,9 @@ logger = getLogger(__name__)
 async def get_media(
     media_id: UUID, storage: FromDishka[IStorage], media_dao: FromDishka[MediaDAO]
 ) -> MediaWithLink:
-    logger.info(f"Received get media request for media id: {media_id}")
+    logger.info(f"⌛ Received get media request for media id: {media_id}")
+
+    start_time = time.perf_counter()
 
     media = await media_dao.find_by_id(media_id)
     if media is None:
@@ -53,7 +56,11 @@ async def get_media(
 
     result = MediaWithLink.from_media(Media.from_persistence(media), url)
 
-    logger.info(f"Get media request for media id: {media_id} completed")
+    duration = (time.perf_counter() - start_time) * 1000
+    logger.info(
+        f"✅ Get media request for media id: {media_id} completed. "
+        + f"Duration: {duration:.0f}ms"
+    )
     return result
 
 
@@ -72,7 +79,9 @@ async def get_channel(
     channel_dao: FromDishka[ChannelDAO],
     channel_statistics_dao: FromDishka[ChannelStatisticDAO],
 ) -> Channel:
-    logger.info(f"Received get channel request for channel with id: {channel_id}")
+    logger.info(f"⌛ Received get channel request for channel with id: {channel_id}")
+
+    start_time = time.perf_counter()
 
     channel = await channel_dao.find_by_id_with_loaded_logo(channel_id)
     if channel is None:
@@ -93,17 +102,24 @@ async def get_channel(
 
     result = Channel.from_persistence(channel, newest_statistic)
 
-    logger.info(f"Get channel request for channel with id: {channel_id} completed")
+    duration = (time.perf_counter() - start_time) * 1000
+    logger.info(
+        f"✅ Get channel request for channel with id: {channel_id} completed. "
+        + f"Duration: {duration:.0f}ms"
+    )
     return result
 
 
 @router.get("/channel/ids", status_code=status.HTTP_200_OK)
 async def get_channel_ids(channel_dao: FromDishka[ChannelDAO]) -> list[int]:
-    logger.info("Received get channel ids request")
+    logger.info("⌛ Received get channel ids request")
+
+    start_time = time.perf_counter()
 
     result = await channel_dao.get_ids()
 
-    logger.info("Get channel ids request completed")
+    duration = (time.perf_counter() - start_time) * 1000
+    logger.info(f"✅ Get channel ids request completed. Duration: {duration:.0f}ms")
     return result
 
 
@@ -116,9 +132,11 @@ async def get_channel_statistics(
     limit: int | None = None,
 ) -> list[ChannelStatistic]:
     logger.info(
-        f"Received get channel statistics request. sorting={sorting}, "
+        f"⌛ Received get channel statistics request. sorting={sorting}, "
         + f"channel_id={channel_id}, skip={skip}, limit={limit}"
     )
+
+    start_time = time.perf_counter()
 
     statistics = await channel_statistics_dao.get_channel_statistics(
         channel_id, sorting, skip, limit
@@ -126,9 +144,10 @@ async def get_channel_statistics(
 
     result = [ChannelStatistic.from_persistence(statistic) for statistic in statistics]
 
+    duration = (time.perf_counter() - start_time) * 1000
     logger.info(
-        "Get channel statistics request "
-        + f"for channel with id: {channel_id} completed"
+        "✅ Get channel statistics request "
+        + f"for channel with id: {channel_id} completed. Duration: {duration:.0f}ms"
     )
     return result
 
@@ -142,9 +161,11 @@ async def get_channel_messages(
     limit: int | None = None,
 ) -> list[ChannelMessage]:
     logger.info(
-        f"Received get channel messages request. sorting={sorting}, "
+        f"⌛ Received get channel messages request. sorting={sorting}, "
         + f"channel_id={channel_id}, skip={skip}, limit={limit}"
     )
+
+    start_time = time.perf_counter()
 
     messages = await channel_message_dao.get_channel_messages(
         channel_id, sorting, skip, limit
@@ -152,8 +173,10 @@ async def get_channel_messages(
 
     result = [ChannelMessage.from_persistence(message) for message in messages]
 
+    duration = (time.perf_counter() - start_time) * 1000
     logger.info(
-        "Get channel messages request " + f"for channel with id: {channel_id} completed"
+        "✅ Get channel messages request "
+        + f"for channel with id: {channel_id} completed. Duration: {duration:.0f}ms"
     )
     return result
 
@@ -172,7 +195,9 @@ async def get_message(
     message_id: int,
     channel_message_dao: FromDishka[ChannelMessageDAO],
 ) -> ChannelMessage:
-    logger.info(f"Received get message request for message with id: {message_id}")
+    logger.info(f"⌛ Received get message request for message with id: {message_id}")
+
+    start_time = time.perf_counter()
 
     message = await channel_message_dao.find_by_id(message_id)
     if message is None:
@@ -184,5 +209,9 @@ async def get_message(
 
     result = ChannelMessage.from_persistence(message)
 
-    logger.info(f"Get message request for message with id: {message_id} completed")
+    duration = (time.perf_counter() - start_time) * 1000
+    logger.info(
+        f"✅ Get message request for message with id: {message_id} completed. "
+        + f"Duration: {duration:.0f}ms"
+    )
     return result
