@@ -13,6 +13,7 @@ packages = [
     {include = "parser/dto",from = "components"},
     {include = "parser/storage",from = "components"},
     {include = "parser/opentele",from = "components"},
+    {include = "parser/telegram",from = "components"},
 ]
 
 [tool.poetry.dependencies]
@@ -25,10 +26,9 @@ asyncmy = "^0.2.11"
 cryptography = "^46.0.3"
 aioboto3 = "^15.5.0"
 filetype = "^1.2.0"
-pyqt6 = "^6.10.2"
-tgcrypto = "^1.2.5"
 telethon = "^1.42.0"
-pysocks = "^1.7.1"
+python-socks = {extras = ["asyncio"], version = "^2.8.0"}
+aio-pika = "^9.5.8"
 
 
 [build-system]
