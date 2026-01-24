@@ -11,6 +11,7 @@ from parser.logging import setup_logging
 from parser.persistence import PersistenceProvider
 from parser.settings import ProjectSettings, ProjectSettingsProvider
 from parser.storage import StorageProvider
+from parser.telegram import TelegramProvider
 from uvicorn import Config, Server
 
 from .routers import parser_router, public_router
@@ -30,6 +31,7 @@ async def build_app() -> FastAPI:
         PersistenceProvider(),
         ProjectSettingsProvider(),
         StorageProvider(),
+        TelegramProvider(),
     )
 
     api_settings = await container.get(APISettings)
