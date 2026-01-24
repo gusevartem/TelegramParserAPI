@@ -12,6 +12,7 @@ packages = [
     {include = "parser/settings",from = "../../components"},
     {include = "parser/dto",from = "../../components"},
     {include = "parser/storage",from = "../../components"},
+    {include = "parser/telegram",from = "../../components"},
 ]
 
 [tool.poetry.dependencies]
@@ -23,6 +24,9 @@ sqlalchemy = {extras = ["asyncio"], version = "^2.0.45"}
 asyncmy = "^0.2.11"
 cryptography = "^46.0.3"
 aioboto3 = "^15.5.0"
+telethon = "^1.42.0"
+python-socks = {extras = ["asyncio"], version = "^2.8.0"}
+aio-pika = "^9.5.8"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
