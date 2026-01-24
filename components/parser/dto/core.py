@@ -18,6 +18,7 @@ from parser.persistence import (
     Media as MediaPersistence,
 )
 from parser.persistence import ProxyType
+from parser.persistence import TelegramClientProxy as TelegramClientProxyPersistence
 from pydantic import BaseModel
 
 
@@ -144,3 +145,23 @@ class ProxySettings(BaseModel):
     port: int
     username: str | None
     password: str | None
+
+    @staticmethod
+    def to_persistence(proxy: ProxySettings) -> TelegramClientProxyPersistence:
+        return TelegramClientProxyPersistence(
+            proxy_type=proxy.proxy_type,
+            host=proxy.host,
+            port=proxy.port,
+            username=proxy.username,
+            password=proxy.password,
+        )
+
+    @staticmethod
+    def from_persistence(proxy: TelegramClientProxyPersistence) -> ProxySettings:
+        return ProxySettings(
+            proxy_type=proxy.proxy_type,
+            host=proxy.host,
+            port=proxy.port,
+            username=proxy.username,
+            password=proxy.password,
+        )

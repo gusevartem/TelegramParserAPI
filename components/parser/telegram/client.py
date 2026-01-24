@@ -1,12 +1,15 @@
 import time
+from collections.abc import Callable, Coroutine
+from functools import wraps as functools_wraps
 from logging import Logger, getLogger
 from types import TracebackType
-from typing import Any, Protocol, Self, override
+from typing import Any, ParamSpec, Protocol, Self, TypeVar, override
 
 from parser.dto import ProxySettings, TelegramCredentials
 from parser.persistence import ProxyType as PersistenceProxyType
 from python_socks import ProxyType as SocksProxyType
 from telethon import TelegramClient as TelethonTelegramClient
+from telethon import errors
 from telethon.hints import (
     DateLike,
     EntitiesLike,
@@ -19,6 +22,32 @@ from telethon.requestiter import RequestIter
 from telethon.sessions.abstract import Session
 from telethon.tl import TLObject
 from telethon.types import TypePhotoSize, User
+
+from .exceptions import ClientBanned, FloodWait
+
+P = ParamSpec("P")
+T = TypeVar("T")
+
+
+def handle_telethon_errors(
+    func: Callable[P, Coroutine[Any, Any, T]],
+) -> Callable[P, Coroutine[Any, Any, T]]:
+    @functools_wraps(func)
+    async def wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
+        try:
+            return await func(*args, **kwargs)
+        except errors.FloodWaitError as e:
+            raise FloodWait(seconds=e.seconds, message=str(e)) from e
+        except (
+            errors.UserDeactivatedError,
+            errors.UserBannedInChannelError,
+            errors.AuthKeyDuplicatedError,
+            errors.SessionRevokedError,
+            errors.AuthKeyUnregisteredError,
+        ) as e:
+            raise ClientBanned(f"Client banned or invalid: {str(e)}") from e
+
+    return wrapper
 
 
 class ITelegramClient(Protocol):
@@ -36,7 +65,7 @@ class ITelegramClient(Protocol):
     def iter_messages(
         self,
         entity: EntityLike,
-        limit: float | None = None,
+        limit: int | None = None,
         *,
         offset_date: DateLike = None,
         search: str | None = None,
@@ -60,9 +89,10 @@ class ITelegramClient(Protocol):
 class TelegramClient(ITelegramClient):
     def __init__(
         self,
+        session: Session,
         credentials: TelegramCredentials,
         proxy: ProxySettings | None,
-        session: Session,
+        requests_timeout: int = 10,
     ) -> None:
         self.logger: Logger = getLogger(__name__)
 
@@ -76,6 +106,7 @@ class TelegramClient(ITelegramClient):
             "app_version": credentials.app_version,
             "lang_code": credentials.lang_code,
             "system_lang_code": credentials.system_lang_code,
+            "timeout": requests_timeout,
         }
 
         if proxy is not None:
@@ -101,15 +132,19 @@ class TelegramClient(ITelegramClient):
         )
 
     @override
+    @handle_telethon_errors
     async def __aenter__(self) -> Self:
         self.logger.info("⌛ Starting telegram client")
 
         start_time = time.perf_counter()
-        client = await self._telethon_client.start()  # pyright: ignore
+        await self._telethon_client.connect()
+        if not await self._telethon_client.is_user_authorized():
+            raise ClientBanned("Client is not authorized (session invalid or revoked)")
+            
         duration = (time.perf_counter() - start_time) * 1000
 
         self.logger.info(f"✅ Telegram client started. Duration: {duration:.0f}ms")
-        return client
+        return self
 
     @override
     async def __aexit__(

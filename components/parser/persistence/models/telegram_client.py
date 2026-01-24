@@ -5,9 +5,9 @@ from enum import StrEnum
 from typing import override
 from uuid import UUID, uuid4
 
-from sqlalchemy import BigInteger, ForeignKey, String, func
+from sqlalchemy import BigInteger, ForeignKey, String, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, joinedload, mapped_column, relationship
 
 from ._base import BaseDAO, BaseModel
 
@@ -55,7 +55,6 @@ class TelegramClientDAO(BaseDAO[TelegramClient, int]):
         app_version: str,
         lang_code: str,
         system_lang_code: str,
-        lang_pack: str,
         proxy: TelegramClientProxy | None = None,
     ) -> TelegramClient:
         new_client = TelegramClient(
@@ -68,11 +67,26 @@ class TelegramClientDAO(BaseDAO[TelegramClient, int]):
             app_version=app_version,
             lang_code=lang_code,
             system_lang_code=system_lang_code,
-            lang_pack=lang_pack,
             proxy=proxy,
         )
         await self.save(new_client)
         return new_client
+
+    async def is_working_clients_exists(self) -> bool:
+        stmt = select(TelegramClient).where(TelegramClient.banned == False)  # noqa: E712
+
+        result = await self._session.execute(stmt)
+        return result.scalars().first() is not None
+
+    async def find_with_proxy(self, telegram_id: int) -> TelegramClient | None:
+        stmt = (
+            select(TelegramClient)
+            .where(TelegramClient.telegram_id == telegram_id)
+            .options(joinedload(TelegramClient.proxy))
+        )
+
+        result = await self._session.execute(stmt)
+        return result.scalars().first()
 
 
 class ProxyType(StrEnum):
