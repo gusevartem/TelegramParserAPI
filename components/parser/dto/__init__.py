@@ -4,7 +4,8 @@ from .core import (
     ChannelMessageStatistic,
     ChannelStatistic,
     Media,
-    MediaWithLink,
+    MediaWithURL,
+    ParsingTask,
     ProxySettings,
     TelegramCredentials,
 )
@@ -15,7 +16,8 @@ __all__ = [
     "ChannelMessage",
     "ChannelMessageStatistic",
     "ChannelStatistic",
-    "MediaWithLink",
+    "MediaWithURL",
     "TelegramCredentials",
     "ProxySettings",
+    "ParsingTask",
 ]

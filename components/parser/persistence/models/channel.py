@@ -7,6 +7,7 @@ from uuid import UUID
 from sqlalchemy import BigInteger, ForeignKey, String, Text, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, joinedload, mapped_column, relationship
+from sqlalchemy.types import TIMESTAMP
 
 from ._base import BaseDAO, BaseModel
 
@@ -28,9 +29,11 @@ class Channel(BaseModel):
         ForeignKey("media.id", ondelete="SET NULL"), default=None
     )
 
-    recorded_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    recorded_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True), server_default=func.now()
+    )
     updated_at: Mapped[datetime] = mapped_column(
-        server_default=func.now(), onupdate=func.now()
+        TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now()
     )
 
     statistics: Mapped[list[ChannelStatistic]] = relationship(

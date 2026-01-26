@@ -104,6 +104,8 @@ class PersistenceProvider(Provider):
             pool_size=persistence_settings.mysql_pool_size,
             max_overflow=persistence_settings.mysql_max_overflow,
             pool_pre_ping=True,
+            connect_args={"init_command": "SET time_zone = '+00:00'"},
+            isolation_level="READ COMMITTED",
         )
         logger.info("Database engine created")
         if project_settings.debug:

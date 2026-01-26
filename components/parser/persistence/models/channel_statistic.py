@@ -7,6 +7,7 @@ from uuid import UUID, uuid4
 from sqlalchemy import ForeignKey, event, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.types import TIMESTAMP
 
 from ._base import BaseDAO, BaseModel
 
@@ -26,7 +27,9 @@ class ChannelStatistic(BaseModel):
     views: Mapped[int] = mapped_column()
     posts_count: Mapped[int] = mapped_column()
 
-    recorded_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    recorded_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True), server_default=func.now()
+    )
 
     channel: Mapped[Channel] = relationship(back_populates="statistics")
 

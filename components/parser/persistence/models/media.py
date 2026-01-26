@@ -7,6 +7,7 @@ from uuid import UUID, uuid4
 from sqlalchemy import String, event, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.types import TIMESTAMP
 
 from ._base import BaseDAO, BaseModel
 
@@ -19,7 +20,9 @@ class Media(BaseModel):
     size_bytes: Mapped[int] = mapped_column()
     file_name: Mapped[str] = mapped_column(String(255))
 
-    recorded_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    recorded_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True), server_default=func.now()
+    )
 
 
 class MediaDAO(BaseDAO[Media, UUID]):

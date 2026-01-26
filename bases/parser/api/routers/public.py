@@ -11,7 +11,7 @@ from parser.dto import (
     ChannelMessage,
     ChannelStatistic,
     Media,
-    MediaWithLink,
+    MediaWithURL,
 )
 from parser.persistence import (
     ChannelDAO,
@@ -39,7 +39,7 @@ logger = getLogger(__name__)
 )
 async def get_media(
     media_id: UUID, storage: FromDishka[IStorage], media_dao: FromDishka[MediaDAO]
-) -> MediaWithLink:
+) -> MediaWithURL:
     logger.info(f"⌛ Received get media request for media id: {media_id}")
 
     start_time = time.perf_counter()
@@ -54,7 +54,7 @@ async def get_media(
 
     url = await storage.generate_presigned_url(media.file_name)
 
-    result = MediaWithLink.from_media(Media.from_persistence(media), url)
+    result = MediaWithURL.from_media(Media.from_persistence(media), url)
 
     duration = (time.perf_counter() - start_time) * 1000
     logger.info(

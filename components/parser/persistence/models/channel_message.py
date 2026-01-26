@@ -8,6 +8,7 @@ from sqlalchemy import BigInteger, ForeignKey, Text, func, select
 from sqlalchemy.ext.associationproxy import AssociationProxy, association_proxy
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column, relationship, selectinload
+from sqlalchemy.types import TIMESTAMP
 
 from ._base import BaseDAO, BaseModel
 
@@ -21,15 +22,17 @@ class ChannelMessage(BaseModel):
     __tablename__: str = "channel_message"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=False)
-    created_at: Mapped[datetime] = mapped_column()
+    created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True))
     text: Mapped[str] = mapped_column(Text)
     channel_id: Mapped[int] = mapped_column(
         ForeignKey("channel.id", ondelete="CASCADE"), index=True
     )
 
-    recorded_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    recorded_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True), server_default=func.now()
+    )
     updated_at: Mapped[datetime] = mapped_column(
-        server_default=func.now(), onupdate=func.now()
+        TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now()
     )
 
     channel: Mapped[Channel] = relationship(back_populates="messages")

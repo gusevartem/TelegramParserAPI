@@ -17,7 +17,8 @@ from parser.persistence import (
 from parser.persistence import (
     Media as MediaPersistence,
 )
-from parser.persistence import ProxyType
+from parser.persistence import ParsingTask as ParsingTaskPersistence
+from parser.persistence import ParsingTaskStatus, ProxyType
 from parser.persistence import TelegramClientProxy as TelegramClientProxyPersistence
 from pydantic import BaseModel
 
@@ -40,12 +41,12 @@ class Media(BaseModel):
         )
 
 
-class MediaWithLink(Media):
-    link: str
+class MediaWithURL(Media):
+    url: str
 
     @staticmethod
-    def from_media(media: Media, link: str) -> MediaWithLink:
-        return MediaWithLink(**media.model_dump(), link=link)
+    def from_media(media: Media, url: str) -> MediaWithURL:
+        return MediaWithURL(**media.model_dump(), url=url)
 
 
 class ChannelStatistic(BaseModel):
@@ -66,7 +67,6 @@ class ChannelStatistic(BaseModel):
 
 class Channel(BaseModel):
     id: int
-    link: str
     name: str
     description: str | None
     logo: Media | None
@@ -80,7 +80,6 @@ class Channel(BaseModel):
     ) -> Channel:
         return Channel(
             id=channel.id,
-            link=channel.link,
             name=channel.name,
             description=channel.description,
             logo=Media.from_persistence(channel.logo) if channel.logo else None,
@@ -164,4 +163,30 @@ class ProxySettings(BaseModel):
             port=proxy.port,
             username=proxy.username,
             password=proxy.password,
+        )
+
+
+class ParsingTask(BaseModel):
+    id: UUID
+    url: str
+    channel_id: int | None
+    status: ParsingTaskStatus
+    next_run_at: int | None
+    last_parsed_at: int | None
+    created_at: int
+
+    @staticmethod
+    def from_persistence(
+        task: ParsingTaskPersistence, next_run_at: int | None
+    ) -> ParsingTask:
+        return ParsingTask(
+            id=task.id,
+            url=task.url,
+            channel_id=task.channel_id,
+            status=task.status,
+            next_run_at=next_run_at,
+            last_parsed_at=int(task.last_parsed_at.timestamp())
+            if task.last_parsed_at
+            else None,
+            created_at=int(task.created_at.timestamp()),
         )
