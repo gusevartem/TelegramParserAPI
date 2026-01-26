@@ -6,6 +6,7 @@ from .channel_message_statistic import (
 )
 from .channel_statistic import ChannelStatistic, ChannelStatisticDAO
 from .media import Media, MediaDAO
+from .parsing_task import ParsingTask, ParsingTaskDAO, ParsingTaskStatus
 from .telegram_client import (
     ProxyType,
     TelegramClient,
@@ -29,4 +30,7 @@ __all__ = [
     "TelegramClientDAO",
     "TelegramClientProxy",
     "ProxyType",
+    "ParsingTask",
+    "ParsingTaskDAO",
+    "ParsingTaskStatus",
 ]

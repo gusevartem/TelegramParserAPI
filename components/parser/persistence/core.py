@@ -18,6 +18,7 @@ from .models import (
     ChannelMessageStatisticDAO,
     ChannelStatisticDAO,
     MediaDAO,
+    ParsingTaskDAO,
     TelegramClientDAO,
 )
 from .models._base import BaseModel
@@ -34,6 +35,7 @@ def register_model() -> list[type]:
         ChannelStatistic,
         Media,
         MessageMediaLink,
+        ParsingTask,
         TelegramClient,
         TelegramClientProxy,
     )
@@ -47,6 +49,7 @@ def register_model() -> list[type]:
         ChannelMessageStatistic,
         TelegramClient,
         TelegramClientProxy,
+        ParsingTask,
     ]
 
 
@@ -136,5 +139,6 @@ class PersistenceProvider(Provider):
         MediaDAO,
         ChannelMessageStatisticDAO,
         TelegramClientDAO,
+        ParsingTaskDAO,
         scope=Scope.REQUEST,
     )
