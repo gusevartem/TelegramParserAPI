@@ -13,6 +13,7 @@ packages = [
     {include = "parser/dto",from = "../../components"},
     {include = "parser/storage",from = "../../components"},
     {include = "parser/telegram",from = "../../components"},
+    {include = "parser/scheduler",from = "../../components"},
 ]
 
 [tool.poetry.dependencies]

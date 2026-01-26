@@ -9,6 +9,7 @@ from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 from parser.logging import setup_logging
 from parser.persistence import PersistenceProvider
+from parser.scheduler import SchedulerProvider
 from parser.settings import ProjectSettings, ProjectSettingsProvider
 from parser.storage import StorageProvider
 from parser.telegram import TelegramProvider
@@ -32,6 +33,7 @@ async def build_app() -> FastAPI:
         ProjectSettingsProvider(),
         StorageProvider(),
         TelegramProvider(),
+        SchedulerProvider(),
     )
 
     api_settings = await container.get(APISettings)

@@ -1,4 +1,5 @@
 import json
+import time
 from logging import getLogger
 from typing import Annotated, Any
 
@@ -10,7 +11,8 @@ from parser.api.utils import (
     MessageResponse,
     secret_key_check,
 )
-from parser.dto import Channel, ProxySettings, TelegramCredentials
+from parser.dto import Channel, ParsingTask, ProxySettings, TelegramCredentials
+from parser.scheduler import AddTask
 from parser.telegram import InvalidClient, ITelegram
 from pydantic import BaseModel, BeforeValidator
 
@@ -38,15 +40,21 @@ async def parse_channel(
 
 @router.post("/schedule", status_code=status.HTTP_200_OK)
 async def add_channel(
-    channel_link: str = Body(..., description="Ссылка на канал", embed=True),
+    add_task: FromDishka[AddTask],
+    channel_url: str = Body(..., description="Ссылка на канал", embed=True),
     _: None = Security(secret_key_check),
-) -> Channel:
-    logger.info(f"Received add channel request for channel link: {channel_link}")
-    raise CustomHTTPException(
-        error="NotImplemented",
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        message="Method not implemented",
+) -> ParsingTask:
+    logger.info(f"⌛ Received add channel request for channel link: {channel_url}")
+
+    start_time = time.perf_counter()
+    result = await add_task(channel_url)
+    duration = (time.perf_counter() - start_time) * 1000
+    logger.info(
+        f"✅ Add channel request for channel link: {channel_url} completed. "
+        + f"Duration: {duration:.0f}ms"
     )
+
+    return result
 
 
 class AddClientRequest(BaseModel):
@@ -89,10 +97,16 @@ async def add_client(
         + f"{'Provided' if client_settings.credentials is not None else 'Use default'}"
     )
     try:
+        start_time = time.perf_counter()
         await telegram.add_client(
             session.file.read(),
             credentials=client_settings.credentials,
             proxy=client_settings.proxy,
+        )
+        duration = (time.perf_counter() - start_time) * 1000
+        logger.info(
+            f"✅ Add client request with session: {session.filename} completed. "
+            + f"Duration: {duration:.0f}ms"
         )
     except InvalidClient as e:
         raise CustomHTTPException.from_exception(e, status.HTTP_400_BAD_REQUEST)

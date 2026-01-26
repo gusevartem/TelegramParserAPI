@@ -1,6 +1,8 @@
 from collections.abc import AsyncIterable
 from datetime import datetime, timedelta, timezone
 
+from dishka import Provider, Scope, provide
+from dishka.dependency_source import CompositeDependencySource
 from parser.dto import ParsingTask as ParsingTaskDTO
 from parser.persistence import (
     ParsingTaskDAO,
@@ -112,3 +114,16 @@ class GetTasks:
             )
 
         await self.parsing_task_dao.commit()
+
+
+class SchedulerProvider(Provider):
+    add_task: CompositeDependencySource = provide(
+        AddTask,
+        provides=AddTask,
+        scope=Scope.REQUEST,
+    )
+    get_tasks: CompositeDependencySource = provide(
+        GetTasks,
+        provides=GetTasks,
+        scope=Scope.REQUEST,
+    )
