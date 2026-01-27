@@ -5,6 +5,7 @@ from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from logging import Logger, getLogger
 from typing import Protocol, override
 
+import aio_pika
 from dishka import Provider, Scope, provide
 from dishka.dependency_source import CompositeDependencySource
 from parser.dto import ProxySettings, TelegramCredentials
@@ -17,7 +18,11 @@ from .exceptions import (
     InvalidClient,
     NoWorkingClientsFoundError,
 )
-from .session_storage import ITelegramSessionStorage, RabbitMQSessionStorage
+from .session_storage import (
+    ITelegramSessionStorage,
+    RabbitMQSessionStorage,
+    SessionStorageChannel,
+)
 from .settings import TelegramSettings
 
 
@@ -152,7 +157,8 @@ class Telegram(ITelegram):
 
                 async with client:
                     self.logger.info(
-                        f"🚀 Starting usage of client: {session_container.user_id}"
+                        f"🚀 Starting usage of client: {session_container.user_id}. "
+                        + f"Phone: {client_info.phone}"
                     )
                     start_time = time.perf_counter()
 
@@ -161,6 +167,7 @@ class Telegram(ITelegram):
                     duration = (time.perf_counter() - start_time) * 1000
                     self.logger.info(
                         f"🏁 Finished usage of client: {session_container.user_id}. "
+                        + f"Phone: {client_info.phone}. "
                         + f"Duration: {duration:.0f}ms"
                     )
 
@@ -189,6 +196,16 @@ class TelegramProvider(Provider):
     @provide(scope=Scope.APP)
     def settings(self) -> TelegramSettings:
         return TelegramSettings()  # type: ignore # pyright: ignore
+
+    @provide(scope=Scope.REQUEST)
+    async def channel(
+        self, connection: aio_pika.abc.AbstractConnection
+    ) -> AsyncIterator[SessionStorageChannel]:
+        channel = await connection.channel(
+            publisher_confirms=True, on_return_raises=True
+        )
+        yield SessionStorageChannel(channel)
+        await channel.close()
 
     session_storage: CompositeDependencySource = provide(
         RabbitMQSessionStorage,

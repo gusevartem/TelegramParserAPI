@@ -8,6 +8,7 @@ from dishka.integrations.fastapi import setup_dishka
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 from parser.logging import setup_logging
+from parser.message_broker import MessageBrokerProvider
 from parser.persistence import PersistenceProvider
 from parser.scheduler import SchedulerProvider
 from parser.settings import ProjectSettings, ProjectSettingsProvider
@@ -34,6 +35,7 @@ async def build_app() -> FastAPI:
         StorageProvider(),
         TelegramProvider(),
         SchedulerProvider(),
+        MessageBrokerProvider(),
     )
 
     api_settings = await container.get(APISettings)

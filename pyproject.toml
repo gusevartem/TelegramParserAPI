@@ -15,6 +15,7 @@ packages = [
     {include = "parser/opentele",from = "components"},
     {include = "parser/telegram",from = "components"},
     {include = "parser/scheduler",from = "components"},
+    {include = "parser/message_broker",from = "components"},
 ]
 
 [tool.poetry.dependencies]
