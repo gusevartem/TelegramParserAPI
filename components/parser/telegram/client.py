@@ -77,6 +77,9 @@ class ITelegramClient(Protocol):
         exc_tb: TracebackType | None,
     ) -> None: ...
 
+    @property
+    def current_session(self) -> Session: ...
+
     async def __call__(self, request: TLObject) -> Any | list[Any]: ...
     async def get_me(self) -> User: ...
     async def get_entity(self, entity: EntitiesLike) -> Entity | list[Entity]: ...
@@ -102,6 +105,16 @@ class ITelegramClient(Protocol):
         *,
         download_big: bool = True,
     ) -> str | None: ...
+
+
+class ITelegramClientFactory(Protocol):
+    def __call__(
+        self,
+        session: Session,
+        credentials: TelegramCredentials,
+        proxy: ProxySettings | None,
+        requests_timeout: int = 10,
+    ) -> ITelegramClient: ...
 
 
 class TelegramClient(ITelegramClient):
@@ -150,6 +163,7 @@ class TelegramClient(ITelegramClient):
         )
 
     @property
+    @override
     def current_session(self) -> Session:
         if not isinstance(self._telethon_client.session, Session):  # pyright: ignore
             raise RuntimeError("Unexpected session type")

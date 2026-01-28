@@ -13,7 +13,7 @@ from parser.persistence import TelegramClientDAO
 from telethon.sessions.sqlite import SQLiteSession
 from telethon.sessions.string import StringSession
 
-from .client import ITelegramClient, TelegramClient
+from .client import ITelegramClient, ITelegramClientFactory, TelegramClient
 from .exceptions import (
     InvalidClient,
     NoWorkingClientsFoundError,
@@ -44,10 +44,12 @@ class Telegram(ITelegram):
         self,
         telegram_client_dao: TelegramClientDAO,
         session_storage: ITelegramSessionStorage,
+        telegram_client_factory: ITelegramClientFactory,
         settings: TelegramSettings,
     ) -> None:
         self.telegram_client_dao: TelegramClientDAO = telegram_client_dao
         self.session_storage: ITelegramSessionStorage = session_storage
+        self.telegram_client_factory: ITelegramClientFactory = telegram_client_factory
         self.settings: TelegramSettings = settings
         self.logger: Logger = getLogger(__name__)
 
@@ -68,7 +70,7 @@ class Telegram(ITelegram):
             credentials = credentials or self.settings.default_credentials
 
             session = SQLiteSession(session_temp_file.name)
-            client = TelegramClient(
+            client = self.telegram_client_factory(
                 session=session,
                 credentials=credentials,
                 proxy=proxy,
@@ -139,7 +141,7 @@ class Telegram(ITelegram):
                     )
                     raise InvalidClient("Client from session storage is banned")
 
-                client = TelegramClient(
+                client = self.telegram_client_factory(
                     session=session_container.session,
                     credentials=TelegramCredentials(
                         api_id=client_info.api_id,
@@ -206,6 +208,10 @@ class TelegramProvider(Provider):
         )
         yield SessionStorageChannel(channel)
         await channel.close()
+
+    @provide(scope=Scope.REQUEST)
+    def telegram_client_factory(self) -> ITelegramClientFactory:
+        return TelegramClient
 
     session_storage: CompositeDependencySource = provide(
         RabbitMQSessionStorage,
