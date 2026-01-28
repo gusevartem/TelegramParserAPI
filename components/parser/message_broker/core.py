@@ -77,7 +77,7 @@ class MessageBroker(IMessageBroker):
         await self.setup(self._channel, self.settings, self.logger)
 
         queue = await self._channel.get_queue(self.settings.parsing_tasks_queue_name)
-        await self._channel.set_qos(prefetch_count=1)
+
         self.logger.info(f"⌛ Getting task with timeout: {timeout}")
 
         async with queue.iterator() as queue_iter:
@@ -142,18 +142,21 @@ class MessageBrokerProvider(Provider):
         yield connection
         await connection.close()
 
-    @provide(scope=Scope.REQUEST)
+    @provide(scope=Scope.APP)
     async def channel(
         self, connection: aio_pika.abc.AbstractConnection
     ) -> AsyncIterator[BrokerChannel]:
         channel = await connection.channel(
             publisher_confirms=True, on_return_raises=True
         )
+        await channel.set_qos(prefetch_count=1)
+
         yield BrokerChannel(channel)
+
         await channel.close()
 
     message_broker: CompositeDependencySource = provide(
         MessageBroker,
-        scope=Scope.REQUEST,
+        scope=Scope.APP,
         provides=IMessageBroker,
     )

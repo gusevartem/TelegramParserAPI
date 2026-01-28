@@ -1,9 +1,10 @@
 from abc import ABC, abstractmethod
-from collections.abc import Sequence
+from collections.abc import AsyncIterator, Callable, Sequence
+from contextlib import asynccontextmanager
 from typing import Any
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncAttrs, AsyncSession
+from sqlalchemy.ext.asyncio import AsyncAttrs, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import DeclarativeBase
 
 
@@ -48,3 +49,23 @@ class BaseDAO[Model: BaseModel, Id](ABC):
     @abstractmethod
     async def create(self, *args: Any, **kwargs: Any) -> Model:
         pass
+
+
+class BaseDAOFactory[DAO: BaseDAO[Any, Any]]:
+    def __init__(
+        self,
+        session_maker: async_sessionmaker[AsyncSession],
+        dao_cls: Callable[[AsyncSession], DAO],
+    ) -> None:
+        self._session_maker: async_sessionmaker[AsyncSession] = session_maker
+        self.dao_cls: Callable[[AsyncSession], DAO] = dao_cls
+
+    @asynccontextmanager
+    async def __call__(self) -> AsyncIterator[DAO]:
+        async with self._session_maker() as session:
+            yield self.dao_cls(session)
+
+    def __new__(cls, *args: Any, **kwargs: Any):
+        if cls is BaseDAOFactory:
+            raise TypeError(f"Only subclasses of {cls.__name__} can be instantiated")
+        return super().__new__(cls)

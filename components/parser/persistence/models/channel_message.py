@@ -6,11 +6,11 @@ from uuid import UUID
 
 from sqlalchemy import BigInteger, ForeignKey, Text, func, select
 from sqlalchemy.ext.associationproxy import AssociationProxy, association_proxy
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.orm import Mapped, mapped_column, relationship, selectinload
 from sqlalchemy.types import TIMESTAMP
 
-from ._base import BaseDAO, BaseModel
+from ._base import BaseDAO, BaseDAOFactory, BaseModel
 
 if TYPE_CHECKING:
     from .channel import Channel
@@ -110,6 +110,11 @@ class ChannelMessageDAO(BaseDAO[ChannelMessage, int]):
 
         result = await self._session.execute(stmt)
         return result.scalars().first()
+
+
+class ChannelMessageDAOFactory(BaseDAOFactory[ChannelMessageDAO]):
+    def __init__(self, session_maker: async_sessionmaker[AsyncSession]) -> None:
+        super().__init__(session_maker, ChannelMessageDAO)
 
 
 class MessageMediaLink(BaseModel):

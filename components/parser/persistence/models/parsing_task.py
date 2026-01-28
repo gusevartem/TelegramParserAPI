@@ -7,11 +7,11 @@ from typing import TYPE_CHECKING, Any, override
 from uuid import UUID, uuid4
 
 from sqlalchemy import CheckConstraint, ForeignKey, String, func, select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.types import TIMESTAMP
 
-from ._base import BaseDAO, BaseModel
+from ._base import BaseDAO, BaseDAOFactory, BaseModel
 
 if TYPE_CHECKING:
     from .channel import Channel
@@ -50,7 +50,7 @@ class ParsingTask(BaseModel):
     channel: Mapped[Channel | None] = relationship(back_populates="tasks")
 
 
-class ParsingTaskDAO(BaseDAO[ParsingTask, int]):
+class ParsingTaskDAO(BaseDAO[ParsingTask, UUID]):
     def __init__(self, session: AsyncSession) -> None:
         super().__init__(session, ParsingTask)
 
@@ -122,3 +122,8 @@ class ParsingTaskDAO(BaseDAO[ParsingTask, int]):
 
         result = await self._session.execute(stmt)
         return result.scalars().all()
+
+
+class ParsingTaskDAOFactory(BaseDAOFactory[ParsingTaskDAO]):
+    def __init__(self, session_maker: async_sessionmaker[AsyncSession]) -> None:
+        super().__init__(session_maker, ParsingTaskDAO)

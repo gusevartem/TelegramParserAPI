@@ -5,11 +5,11 @@ from typing import TYPE_CHECKING, Any, override
 from uuid import UUID, uuid4
 
 from sqlalchemy import ForeignKey, event, func
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.types import TIMESTAMP
 
-from ._base import BaseDAO, BaseModel
+from ._base import BaseDAO, BaseDAOFactory, BaseModel
 
 if TYPE_CHECKING:
     from .channel_message import ChannelMessage
@@ -45,6 +45,11 @@ class ChannelMessageStatisticDAO(BaseDAO[ChannelMessageStatistic, UUID]):
         )
         await self.save(new_statistic)
         return new_statistic
+
+
+class ChannelMessageStatisticDAOFactory(BaseDAOFactory[ChannelMessageStatisticDAO]):
+    def __init__(self, session_maker: async_sessionmaker[AsyncSession]) -> None:
+        super().__init__(session_maker, ChannelMessageStatisticDAO)
 
 
 @event.listens_for(ChannelMessageStatistic, "before_update")

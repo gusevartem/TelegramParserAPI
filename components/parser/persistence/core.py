@@ -14,12 +14,19 @@ from sqlalchemy.ext.asyncio import (
 
 from .models import (
     ChannelDAO,
+    ChannelDAOFactory,
     ChannelMessageDAO,
+    ChannelMessageDAOFactory,
     ChannelMessageStatisticDAO,
+    ChannelMessageStatisticDAOFactory,
     ChannelStatisticDAO,
+    ChannelStatisticDAOFactory,
     MediaDAO,
+    MediaDAOFactory,
     ParsingTaskDAO,
+    ParsingTaskDAOFactory,
     TelegramClientDAO,
+    TelegramClientDAOFactory,
 )
 from .models._base import BaseModel
 from .settings import PersistenceSettings
@@ -143,4 +150,15 @@ class PersistenceProvider(Provider):
         TelegramClientDAO,
         ParsingTaskDAO,
         scope=Scope.REQUEST,
+    )
+
+    data_access_object_factories: CompositeDependencySource = provide_all(
+        ChannelDAOFactory,
+        ChannelMessageDAOFactory,
+        ChannelStatisticDAOFactory,
+        MediaDAOFactory,
+        ChannelMessageStatisticDAOFactory,
+        TelegramClientDAOFactory,
+        ParsingTaskDAOFactory,
+        scope=Scope.APP,
     )

@@ -5,11 +5,11 @@ from typing import Any, override
 from uuid import UUID, uuid4
 
 from sqlalchemy import String, event, func
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.types import TIMESTAMP
 
-from ._base import BaseDAO, BaseModel
+from ._base import BaseDAO, BaseDAOFactory, BaseModel
 
 
 class Media(BaseModel):
@@ -37,6 +37,11 @@ class MediaDAO(BaseDAO[Media, UUID]):
         )
         await self.save(new_media)
         return new_media
+
+
+class MediaDAOFactory(BaseDAOFactory[MediaDAO]):
+    def __init__(self, session_maker: async_sessionmaker[AsyncSession]) -> None:
+        super().__init__(session_maker, MediaDAO)
 
 
 @event.listens_for(Media, "before_update")

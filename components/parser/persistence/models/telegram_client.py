@@ -6,11 +6,11 @@ from typing import override
 from uuid import UUID, uuid4
 
 from sqlalchemy import BigInteger, ForeignKey, String, func, select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.orm import Mapped, joinedload, mapped_column, relationship
 from sqlalchemy.types import TIMESTAMP
 
-from ._base import BaseDAO, BaseModel
+from ._base import BaseDAO, BaseDAOFactory, BaseModel
 
 
 class TelegramClient(BaseModel):
@@ -90,6 +90,11 @@ class TelegramClientDAO(BaseDAO[TelegramClient, int]):
 
         result = await self._session.execute(stmt)
         return result.scalars().first()
+
+
+class TelegramClientDAOFactory(BaseDAOFactory[TelegramClientDAO]):
+    def __init__(self, session_maker: async_sessionmaker[AsyncSession]) -> None:
+        super().__init__(session_maker, TelegramClientDAO)
 
 
 class ProxyType(StrEnum):

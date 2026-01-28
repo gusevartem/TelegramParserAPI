@@ -5,11 +5,11 @@ from typing import TYPE_CHECKING, Any, Literal, override
 from uuid import UUID, uuid4
 
 from sqlalchemy import ForeignKey, event, func, select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.types import TIMESTAMP
 
-from ._base import BaseDAO, BaseModel
+from ._base import BaseDAO, BaseDAOFactory, BaseModel
 
 if TYPE_CHECKING:
     from .channel import Channel
@@ -87,6 +87,11 @@ class ChannelStatisticDAO(BaseDAO[ChannelStatistic, UUID]):
 
         result = await self._session.execute(stmt)
         return list(result.scalars().all())
+
+
+class ChannelStatisticDAOFactory(BaseDAOFactory[ChannelStatisticDAO]):
+    def __init__(self, session_maker: async_sessionmaker[AsyncSession]) -> None:
+        super().__init__(session_maker, ChannelStatisticDAO)
 
 
 @event.listens_for(ChannelStatistic, "before_update")

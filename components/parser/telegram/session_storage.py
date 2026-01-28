@@ -123,7 +123,6 @@ class RabbitMQSessionStorage(ITelegramSessionStorage):
         await self.setup(self._channel, self.settings, self.logger)
 
         queue = await self._channel.get_queue(self.settings.session_storage_queue_name)
-        await self._channel.set_qos(prefetch_count=1)
 
         self.logger.info(f"⌛ Getting session with timeout {timeout}")
 
