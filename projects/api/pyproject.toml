@@ -29,6 +29,7 @@ aioboto3 = "^15.5.0"
 telethon = "^1.42.0"
 python-socks = {extras = ["asyncio"], version = "^2.8.0"}
 aio-pika = "^9.5.8"
+cryptg = "^0.5.2"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
