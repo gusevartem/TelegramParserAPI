@@ -27,7 +27,7 @@ from ctypes import (
     c_short as short,
     c_ushort as ushort,
 )
-from PyQt6.QtCore import (
+from PyQt5.QtCore import (
     QByteArray,
     QDataStream,
     QBuffer,

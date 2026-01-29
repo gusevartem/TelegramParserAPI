@@ -56,7 +56,9 @@ class MapData(BaseObject):  # nocov
         try:
             mapData = td.Storage.ReadFile("map", self.basePath)
         except OpenTeleException as e:
-            logging.warning(f"Unknown key type in encrypted map: {keyType}")
+            raise TDataReadMapDataFailed(
+                "Could not read map data, find not found or couldn't be opened"
+            ) from e
 
         legacySalt, legacyKeyEncrypted, mapEncrypted = (
             QByteArray(),
@@ -94,7 +96,7 @@ class MapData(BaseObject):  # nocov
         try:
             map = td.Storage.DecryptLocal(mapEncrypted, localKey)
         except OpenTeleException as e:
-            raise ("Could not decrypt map data") from e
+            raise TDataReadMapDataFailed("Could not decrypt map data") from e
 
         selfSerialized = QByteArray()
         draftsMap: typing.Dict[PeerId, FileKey] = {}
