@@ -3,7 +3,7 @@ from collections.abc import AsyncIterator, Callable, Coroutine
 from contextlib import contextmanager
 from functools import wraps as functools_wraps
 from logging import Logger, getLogger
-from types import CoroutineType, TracebackType
+from types import TracebackType
 from typing import Any, ParamSpec, Protocol, Self, TypeVar, override
 
 from parser.dto import ProxySettings, TelegramCredentials
@@ -47,7 +47,7 @@ def _telethon_exception_handler():
 
 def handle_telethon_errors(
     func: Callable[P, Coroutine[Any, Any, T]],
-) -> Callable[P, CoroutineType[Any, Any, T]]:
+) -> Callable[P, Any]:
     @functools_wraps(func)
     async def wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
         with _telethon_exception_handler():

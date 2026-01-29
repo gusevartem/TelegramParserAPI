@@ -79,10 +79,6 @@ class RabbitMQSessionStorage(ITelegramSessionStorage):
             durable=True,
             arguments={"x-queue-type": "quorum"},
         )
-        await queue.bind(
-            channel.default_exchange,
-            routing_key=settings.session_storage_queue_name,
-        )
 
         logger.info(
             "⌛ Declaring session storage delayed exchange: "

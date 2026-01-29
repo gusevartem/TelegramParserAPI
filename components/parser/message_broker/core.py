@@ -43,14 +43,10 @@ class MessageBroker(IMessageBroker):
             return
         logger.info("⌛ Configuring message broker")
         logger.info(f"⌛ Declaring tasks queue: {settings.parsing_tasks_queue_name}")
-        queue = await channel.declare_queue(
+        await channel.declare_queue(
             settings.parsing_tasks_queue_name,
             durable=True,
             arguments={"x-queue-type": "quorum"},
-        )
-        await queue.bind(
-            channel.default_exchange,
-            routing_key=settings.parsing_tasks_queue_name,
         )
 
         logger.info("✅ Message broker configured")
@@ -120,7 +116,7 @@ class MessageBroker(IMessageBroker):
                 await message.reject(requeue=False)
                 raise InvalidTask(f"Invalid task: {str(e)}") from e
             except Exception:
-                self.logger.error("❌ Unexpected error, requeueing...", exc_info=True)
+                self.logger.error("❌ Unexpected error, requeueing...")
                 raise
 
 

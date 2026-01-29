@@ -105,14 +105,14 @@ class Telegram(ITelegram):
                     )
                     await telegram_client_dao.commit()
 
-                self.logger.info("⌛ Adding client to session storage")
-                string_session = StringSession()
-                string_session.set_dc(
-                    session.dc_id, session.server_address, session.port
-                )
-                string_session.auth_key = session.auth_key
+                    self.logger.info("⌛ Adding client to session storage")
+                    string_session = StringSession()
+                    string_session.set_dc(
+                        session.dc_id, session.server_address, session.port
+                    )
+                    string_session.auth_key = session.auth_key
 
-                await self.session_storage.add_session(me.id, string_session.save())
+                    await self.session_storage.add_session(me.id, string_session.save())
 
         duration = (time.perf_counter() - start_time) * 1000
         self.logger.info(f"✅ Client added successfully. Duration: {duration:.0f}ms")
