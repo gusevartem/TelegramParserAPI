@@ -30,10 +30,14 @@ class MediaDAO(BaseDAO[Media, UUID]):
         super().__init__(session, Media)
 
     @override
-    async def create(self, mime_type: str, size_bytes: int) -> Media:
+    async def create(
+        self, id: UUID, mime_type: str, size_bytes: int, file_name: str
+    ) -> Media:
         new_media = Media(
+            id=id,
             mime_type=mime_type,
             size_bytes=size_bytes,
+            file_name=file_name,
         )
         await self.save(new_media)
         return new_media

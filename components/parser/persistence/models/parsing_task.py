@@ -123,6 +123,12 @@ class ParsingTaskDAO(BaseDAO[ParsingTask, UUID]):
         result = await self._session.execute(stmt)
         return result.scalars().all()
 
+    async def find_by_channel_id(self, channel_id: int) -> Sequence[ParsingTask]:
+        stmt = select(ParsingTask).where(ParsingTask.channel_id == channel_id)
+
+        result = await self._session.execute(stmt)
+        return result.scalars().all()
+
 
 class ParsingTaskDAOFactory(BaseDAOFactory[ParsingTaskDAO]):
     def __init__(self, session_maker: async_sessionmaker[AsyncSession]) -> None:

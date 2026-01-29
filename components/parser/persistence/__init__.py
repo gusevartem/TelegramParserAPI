@@ -16,6 +16,7 @@ from .models import (
     MediaDAO,
     MediaDAOFactory,
     MessageMediaLink,
+    MultipleDAOFactory,
     ParsingTask,
     ParsingTaskDAO,
     ParsingTaskDAOFactory,
@@ -55,4 +56,5 @@ __all__ = [
     "ProxyType",
     "PersistenceProvider",
     "register_model",
+    "MultipleDAOFactory",
 ]

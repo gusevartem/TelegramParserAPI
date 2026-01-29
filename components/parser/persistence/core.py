@@ -23,6 +23,7 @@ from .models import (
     ChannelStatisticDAOFactory,
     MediaDAO,
     MediaDAOFactory,
+    MultipleDAOFactory,
     ParsingTaskDAO,
     ParsingTaskDAOFactory,
     TelegramClientDAO,
@@ -161,4 +162,8 @@ class PersistenceProvider(Provider):
         TelegramClientDAOFactory,
         ParsingTaskDAOFactory,
         scope=Scope.APP,
+    )
+
+    multiple_dao_factory: CompositeDependencySource = provide(
+        MultipleDAOFactory, scope=Scope.APP
     )

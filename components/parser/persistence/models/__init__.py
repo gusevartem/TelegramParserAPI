@@ -1,3 +1,4 @@
+from ._base import MultipleDAOFactory
 from .channel import Channel, ChannelDAO, ChannelDAOFactory
 from .channel_message import (
     ChannelMessage,
@@ -56,4 +57,5 @@ __all__ = [
     "ParsingTaskDAO",
     "ParsingTaskDAOFactory",
     "ParsingTaskStatus",
+    "MultipleDAOFactory",
 ]

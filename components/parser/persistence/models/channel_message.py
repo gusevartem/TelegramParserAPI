@@ -40,7 +40,9 @@ class ChannelMessage(BaseModel):
         back_populates="message", cascade="all, delete-orphan", passive_deletes=True
     )
     media: AssociationProxy[list[Media]] = association_proxy(
-        "media_links", "media_item"
+        "media_links",
+        "media_item",
+        creator=lambda media_obj: MessageMediaLink(media_item=media_obj),
     )
     statistics: Mapped[list[ChannelMessageStatistic]] = relationship(
         back_populates="message", cascade="all, delete-orphan", passive_deletes=True

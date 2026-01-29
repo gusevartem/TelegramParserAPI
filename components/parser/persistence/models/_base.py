@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Callable, Sequence
 from contextlib import asynccontextmanager
-from typing import Any
+from typing import Any, TypeVar
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncAttrs, AsyncSession, async_sessionmaker
@@ -22,6 +22,10 @@ class BaseDAO[Model: BaseModel, Id](ABC):
         await self._session.flush()
         return obj
 
+    async def refresh(self, obj: Model) -> Model:
+        await self._session.refresh(obj)
+        return obj
+
     async def find_by_id(self, id: Id) -> Model | None:
         return await self._session.get(self.model, id)
 
@@ -31,14 +35,6 @@ class BaseDAO[Model: BaseModel, Id](ABC):
             stmt = stmt.limit(limit)
         result = (await self._session.execute(stmt)).scalars().all()
         return result
-
-    async def delete(self, id: Id) -> bool:
-        obj = await self.find_by_id(id)
-        if obj is None:
-            return False
-        await self._session.delete(obj)
-        await self._session.flush()
-        return True
 
     async def exists_by_id(self, id: Id) -> bool:
         return await self.find_by_id(id) is not None
@@ -69,3 +65,27 @@ class BaseDAOFactory[DAO: BaseDAO[Any, Any]]:
         if cls is BaseDAOFactory:
             raise TypeError(f"Only subclasses of {cls.__name__} can be instantiated")
         return super().__new__(cls)
+
+
+T_DAO = TypeVar("T_DAO", bound=BaseDAO[Any, Any])
+
+
+class _DAOFactory:
+    def __init__(self, session: AsyncSession) -> None:
+        self._session: AsyncSession = session
+
+    def __call__(self, dao_cls: Callable[[AsyncSession], T_DAO]) -> T_DAO:
+        return dao_cls(self._session)
+
+    async def commit(self) -> None:
+        await self._session.commit()
+
+
+class MultipleDAOFactory:
+    def __init__(self, session_maker: async_sessionmaker[AsyncSession]) -> None:
+        self._session_maker: async_sessionmaker[AsyncSession] = session_maker
+
+    @asynccontextmanager
+    async def __call__(self) -> AsyncIterator[_DAOFactory]:
+        async with self._session_maker() as session:
+            yield _DAOFactory(session)
