@@ -2,6 +2,7 @@ import json
 import time
 from logging import getLogger
 from typing import Annotated, Any
+from uuid import UUID
 
 from dishka.integrations.fastapi import DishkaRoute, FromDishka
 from fastapi import APIRouter, Body, File, Form, Security, UploadFile, status
@@ -11,9 +12,10 @@ from parser.api.utils import (
     MessageResponse,
     secret_key_check,
 )
-from parser.dto import Channel, ParsingTask, ProxySettings, TelegramCredentials
-from parser.scheduler import AddTask
-from parser.telegram import InvalidClient, ITelegram
+from parser.dto import ParsingTask, ProxySettings, TelegramCredentials
+from parser.persistence import ParsingTaskDAO
+from parser.scheduler import AddTask, calculate_next_run
+from parser.telegram import ClientBanned, InvalidClient, ITelegram
 from pydantic import BaseModel, BeforeValidator
 
 router = APIRouter(
@@ -25,20 +27,40 @@ router = APIRouter(
 logger = getLogger(__name__)
 
 
-@router.post("", status_code=status.HTTP_200_OK)
-async def parse_channel(
-    channel_link: str = Body(..., description="Ссылка на канал", embed=True),
+@router.get("/task", status_code=status.HTTP_200_OK)
+async def get_task(
+    parsing_task_dao: FromDishka[ParsingTaskDAO],
+    task_id: UUID = Body(..., description="Идентификатор задачи", embed=True),
     _: None = Security(secret_key_check),
-) -> Channel:
-    logger.info(f"Received test request for channel link: {channel_link}")
-    raise CustomHTTPException(
-        error="NotImplemented",
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        message="Method not implemented",
+) -> ParsingTask:
+    logger.info(f"⌛ Received get task request for task id: {task_id}")
+
+    start_time = time.perf_counter()
+    result = await parsing_task_dao.find_by_id(task_id)
+
+    if result is None:
+        raise CustomHTTPException(
+            error="TaskNotFound",
+            status_code=status.HTTP_404_NOT_FOUND,
+            message=f"Task with id {task_id} not found",
+        )
+    duration = (time.perf_counter() - start_time) * 1000
+    logger.info(
+        f"✅ Get task request for task id: {task_id} completed. "
+        + f"Duration: {duration:.0f}ms"
+    )
+    next_run = calculate_next_run(
+        bucket=result.bucket,
+        last_parsed_at=result.last_parsed_at,
+        created_at=result.created_at,
+        status=result.status,
+    )
+    return ParsingTask.from_persistence(
+        result, int(next_run.timestamp()) if next_run is not None else None
     )
 
 
-@router.post("/schedule", status_code=status.HTTP_200_OK)
+@router.post("/schedule", status_code=status.HTTP_201_CREATED)
 async def add_channel(
     add_task: FromDishka[AddTask],
     channel_url: str = Body(..., description="Ссылка на канал", embed=True),
@@ -108,7 +130,7 @@ async def add_client(
             f"✅ Add client request with session: {session.filename} completed. "
             + f"Duration: {duration:.0f}ms"
         )
-    except InvalidClient as e:
-        raise CustomHTTPException.from_exception(e, status.HTTP_400_BAD_REQUEST)
+    except (InvalidClient, ClientBanned) as e:
+        raise CustomHTTPException.from_exception(e, status.HTTP_400_BAD_REQUEST) from e
 
     return MessageResponse(message="Client added successfully")

@@ -80,6 +80,7 @@ async def build_app() -> FastAPI:
                 "path": request.url.path,
                 "method": request.method,
             },
+            exc_info=True,
         )
 
         return JSONResponse(
@@ -100,6 +101,7 @@ async def build_app() -> FastAPI:
                 "path": request.url.path,
                 "method": request.method,
             },
+            exc_info=True,
         )
 
         return JSONResponse(
