@@ -31,13 +31,13 @@ def calculate_next_run(
     if last_parsed_at is not None:
         return (
             bucket_time_today
-            if last_parsed_at < today_start
+            if last_parsed_at.astimezone(timezone.utc) < today_start
             else bucket_time_today + timedelta(days=1)
         )
 
     return (
         bucket_time_today
-        if created_at < today_start
+        if created_at.astimezone(timezone.utc) < today_start
         else bucket_time_today + timedelta(days=1)
     )
 
@@ -47,9 +47,12 @@ class AddTask:
         self.parsing_task_dao: ParsingTaskDAO = parsing_task_dao
 
     async def __call__(self, url: str) -> ParsingTaskDTO:
+        http_url = TypeAdapter(HttpUrl).validate_python(url)
+        clean_url = f"{http_url.scheme}://{http_url.host}{http_url.path}".rstrip("/")
+
         async def create_task_and_generate_dto(bucket: int) -> ParsingTaskDTO:
-            new_task = await self.parsing_task_dao.create(url, bucket)
-            await self.parsing_task_dao.commit()
+            new_task = await self.parsing_task_dao.create(clean_url, bucket)
+            await self.parsing_task_dao.refresh(new_task)
 
             next_run = calculate_next_run(
                 new_task.bucket,
@@ -57,12 +60,12 @@ class AddTask:
                 new_task.created_at,
                 new_task.status,
             )
-            return ParsingTaskDTO.from_persistence(
+            result = ParsingTaskDTO.from_persistence(
                 new_task, int(next_run.timestamp()) if next_run else None
             )
 
-        http_url = TypeAdapter(HttpUrl).validate_python(url)
-        clean_url = f"{http_url.host}{http_url.path}".rstrip("/")
+            await self.parsing_task_dao.commit()
+            return result
 
         existing_task = await self.parsing_task_dao.find_by_url(clean_url)
         if existing_task:
