@@ -17,6 +17,7 @@ packages = [
     {include = "parser/scheduler",from = "components"},
     {include = "parser/message_broker",from = "components"},
     {include = "parser/worker",from = "bases"},
+    {include = "parser/scheduler_loop",from = "bases"},
 ]
 
 [tool.poetry.dependencies]

@@ -1,0 +1,28 @@
+[tool.poetry]
+name = "scheduler"
+version = "0.1.0"
+
+authors = ["ycalk <alosev752@gmail.com>"]
+license = ""
+
+packages = [
+    {include = "parser/scheduler_loop",from = "../../bases"},
+    {include = "parser/settings",from = "../../components"},
+    {include = "parser/scheduler",from = "../../components"},
+    {include = "parser/message_broker",from = "../../components"},
+    {include = "parser/dto",from = "../../components"},
+    {include = "parser/persistence",from = "../../components"},
+    {include = "parser/logging",from = "../../components"},
+]
+
+[tool.poetry.dependencies]
+python = ">=3.12,<3.14"
+pydantic-settings = "^2.12.0"
+dishka = "^1.7.2"
+sqlalchemy = {extras = ["asyncio"], version = "^2.0.45"}
+asyncmy = "^0.2.11"
+aio-pika = "^9.5.8"
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
