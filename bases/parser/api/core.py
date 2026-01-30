@@ -1,13 +1,14 @@
 import asyncio
 from contextlib import asynccontextmanager
 from importlib.metadata import version
-from logging import getLogger
 
 from dishka import make_async_container
 from dishka.integrations.fastapi import setup_dishka
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
+from opentelemetry import trace
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+from opentelemetry.trace import Status, StatusCode
 from parser.logging import setup_logging
 from parser.message_broker import MessageBrokerProvider
 from parser.persistence import PersistenceProvider
@@ -41,7 +42,6 @@ async def build_app() -> FastAPI:
 
     api_settings = await container.get(APISettings)
     project_settings = await container.get(ProjectSettings)
-    logger = getLogger("app")
 
     setup_logging(project_settings, "api", version("api"))
 
@@ -75,16 +75,14 @@ async def build_app() -> FastAPI:
         request: Request, exc: CustomHTTPException
     ) -> JSONResponse:
         error_response = ErrorResponse(error=exc.error, message=exc.message)
-        logger.log(
-            40 if exc.status_code >= 500 else 30,
-            f"Custom HTTP exception: {exc.error} - {exc.message}",
-            extra={
-                "exception_type": exc.error,
-                "path": request.url.path,
-                "method": request.method,
-            },
-            exc_info=True,
-        )
+        span = trace.get_current_span()
+        span.record_exception(exc)
+        span.set_attribute("error", exc.error)
+        span.set_attribute("message", exc.message)
+        span.set_attribute("status_code", exc.status_code)
+        span.set_attribute("request.path", request.url.path)
+        span.set_attribute("request.method", request.method)
+        span.set_status(status=Status(StatusCode.ERROR, exc.error))
 
         return JSONResponse(
             status_code=exc.status_code,
@@ -97,15 +95,14 @@ async def build_app() -> FastAPI:
         request: Request, exc: Exception
     ) -> JSONResponse:
         error_response = ErrorResponse(error=exc.__class__.__name__, message=str(exc))
-        logger.error(
-            f"Unhandled exception: {error_response.error} - {error_response.message}",
-            extra={
-                "exception_type": error_response.error,
-                "path": request.url.path,
-                "method": request.method,
-            },
-            exc_info=True,
-        )
+        span = trace.get_current_span()
+        span.record_exception(exc)
+        span.set_attribute("error", error_response.error)
+        span.set_attribute("message", error_response.message)
+        span.set_attribute("status_code", 500)
+        span.set_attribute("request.path", request.url.path)
+        span.set_attribute("request.method", request.method)
+        span.set_status(status=Status(StatusCode.ERROR, error_response.message))
 
         return JSONResponse(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
