@@ -1,10 +1,12 @@
 import asyncio
 from collections.abc import AsyncIterator
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
-from logging import Logger, getLogger
 from typing import Annotated, Any, ClassVar, NewType, Protocol, override
 
 import aio_pika
+import structlog
+from opentelemetry import trace
+from opentelemetry.trace import Status, StatusCode
 from pydantic import (
     BaseModel,
     BeforeValidator,
@@ -59,20 +61,25 @@ class RabbitMQSessionStorage(ITelegramSessionStorage):
     def __init__(self, channel: SessionStorageChannel, settings: TelegramSettings):
         self._channel: aio_pika.abc.AbstractChannel = channel
         self.settings: TelegramSettings = settings
-        self.logger: Logger = getLogger(__name__)
+
+        self.logger: structlog.BoundLogger = structlog.get_logger("session_storage")
+        self.tracer: trace.Tracer = trace.get_tracer("session_storage")
 
     @classmethod
     async def setup(
         cls,
         channel: aio_pika.abc.AbstractChannel,
         settings: TelegramSettings,
-        logger: Logger,
+        logger: structlog.BoundLogger,
     ):
         if cls._configured:
             return
-        logger.info("⌛ Configuring session storage")
+
+        logger.info("configuring_session_storage", stage="start")
         logger.info(
-            f"⌛ Declaring session storage queue: {settings.session_storage_queue_name}"
+            "declaring_session_queue",
+            queue_name=settings.session_storage_queue_name,
+            queue_type="quorum",
         )
         queue = await channel.declare_queue(
             settings.session_storage_queue_name,
@@ -81,8 +88,8 @@ class RabbitMQSessionStorage(ITelegramSessionStorage):
         )
 
         logger.info(
-            "⌛ Declaring session storage delayed exchange: "
-            + f"{settings.session_storage_delayed_exchange_name}"
+            "declaring_delayed_exchange",
+            exchange_name=settings.session_storage_delayed_exchange_name,
         )
         delayed_exchange = await channel.declare_exchange(
             settings.session_storage_delayed_exchange_name,
@@ -94,7 +101,7 @@ class RabbitMQSessionStorage(ITelegramSessionStorage):
             delayed_exchange, routing_key=settings.session_storage_queue_name
         )
 
-        logger.info("✅ Session storage configured")
+        logger.info("session_storage_configured", stage="complete")
         cls._configured = True
 
     @override
@@ -116,45 +123,152 @@ class RabbitMQSessionStorage(ITelegramSessionStorage):
         Yields:
             Iterator[AsyncIterator[TelegramSession]]: Сессия
         """
-        await self.setup(self._channel, self.settings, self.logger)
-
-        queue = await self._channel.get_queue(self.settings.session_storage_queue_name)
-
-        self.logger.info(f"⌛ Getting session with timeout {timeout}")
-
-        async with queue.iterator() as queue_iter:
-            try:
-                self.logger.info(
-                    "⌛ Waiting for session in queue: "
-                    + f"{self.settings.session_storage_queue_name}"
-                )
-                message = await asyncio.wait_for(
-                    queue_iter.__anext__(), timeout=timeout
-                )
-            except (asyncio.TimeoutError, StopAsyncIteration) as e:
-                self.logger.warning(
-                    "⚠️ Cannot get session from queue: "
-                    + f"{self.settings.session_storage_queue_name}, timeout: {timeout}s"
-                )
-                raise TimeoutError("Cannot get session from queue") from e
-
-        try:
-            telegram_session = TelegramSession.model_validate_json(message.body)
-        except ValidationError as e:
-            self.logger.error(
-                f"❌ Unexpected message in session queue: {str(e)}", exc_info=True
+        with self.tracer.start_as_current_span("session_storage.get_session") as span:
+            span.set_attribute("messaging.system", "rabbitmq")
+            span.set_attribute(
+                "messaging.destination", self.settings.session_storage_queue_name
             )
-            await message.reject(requeue=False)
-            raise InvalidClient("Unexpected message in session queue") from e
+            span.set_attribute("messaging.operation", "consume")
+            span.set_attribute("consume.timeout_seconds", timeout)
 
-        self.logger.info(f"✅ Got session for user_id: {telegram_session.user_id}")
-        try:
-            yield telegram_session
+            logger = self.logger.bind(
+                queue=self.settings.session_storage_queue_name, timeout=timeout
+            )
 
-            # Успех
-            self.logger.info(
-                f"✅ Returning session for user_id: {telegram_session.user_id} "
-                + "back to queue"
+            await self.setup(self._channel, self.settings, logger)
+
+            queue = await self._channel.get_queue(
+                self.settings.session_storage_queue_name
+            )
+
+            logger.info("waiting_for_session", stage="start")
+            span.add_event("consume_started")
+
+            async with queue.iterator() as queue_iter:
+                try:
+                    message = await asyncio.wait_for(
+                        queue_iter.__anext__(), timeout=timeout
+                    )
+                except (asyncio.TimeoutError, StopAsyncIteration) as e:
+                    logger.warning("session_consume_timeout", timeout=timeout)
+                    span.add_event("consume_timeout")
+                    raise TimeoutError("Cannot get session from queue") from e
+
+            try:
+                telegram_session = TelegramSession.model_validate_json(message.body)
+            except ValidationError as e:
+                logger.error("invalid_session_message", error=str(e), exc_info=True)
+                span.set_status(Status(StatusCode.ERROR, "Invalid session message"))
+                span.record_exception(e)
+                await message.reject(requeue=False)
+                raise InvalidClient("Unexpected message in session queue") from e
+
+            logger.info(
+                "session_received", user_id=telegram_session.user_id, stage="success"
+            )
+            span.set_attribute("session.user_id", telegram_session.user_id)
+            span.add_event("session_received")
+
+            try:
+                yield telegram_session
+
+                # Успех
+                logger.info(
+                    "returning_session_to_queue", user_id=telegram_session.user_id
+                )
+                await self._channel.default_exchange.publish(
+                    aio_pika.Message(
+                        body=TelegramSession.model_dump_json(telegram_session).encode(),
+                        delivery_mode=aio_pika.DeliveryMode.PERSISTENT,
+                        content_type="application/json",
+                    ),
+                    routing_key=self.settings.session_storage_queue_name,
+                )
+
+                await message.ack()
+                span.add_event("session_returned")
+
+            except ClientBanned as e:
+                # Бан
+                logger.warning(
+                    "client_banned_removing_session", user_id=telegram_session.user_id
+                )
+                span.set_status(Status(StatusCode.ERROR, "Client banned"))
+                span.record_exception(e)
+                await message.ack()
+                raise InvalidClient("Client is banned", telegram_session.user_id) from e
+
+            except InvalidClient as e:
+                # Не валидная сессия
+                logger.warning(
+                    "client_invalid_removing_session",
+                    user_id=telegram_session.user_id,
+                    reason=e.message,
+                )
+                span.set_status(Status(StatusCode.ERROR, "Client invalid"))
+                span.record_exception(e)
+                await message.ack()
+                raise InvalidClient(e.message, telegram_session.user_id) from e
+
+            except FloodWait as e:
+                # Флуд
+                delay_ms = (e.seconds + 10) * 1000
+                logger.warning(
+                    "flood_wait_delaying_session",
+                    user_id=telegram_session.user_id,
+                    delay_seconds=e.seconds + 10,
+                    delay_ms=delay_ms,
+                )
+                span.add_event("flood_wait_delay", {"delay_ms": delay_ms})
+
+                delayed_exchange = await self._channel.get_exchange(
+                    self.settings.session_storage_delayed_exchange_name
+                )
+                await delayed_exchange.publish(
+                    aio_pika.Message(
+                        body=TelegramSession.model_dump_json(telegram_session).encode(),
+                        delivery_mode=aio_pika.DeliveryMode.PERSISTENT,
+                        headers={"x-delay": delay_ms},
+                    ),
+                    routing_key=self.settings.session_storage_queue_name,
+                )
+
+                await message.ack()
+                raise
+
+            except Exception as e:
+                # Если упало что-то внутри бизнес-логики (не связанное с сессией),
+                # возвращаем сообщение в очередь.
+                logger.error("unhandled_session_usage_error_requeueing", exc_info=True)
+                span.set_status(
+                    Status(StatusCode.ERROR, "Unhandled error during session usage")
+                )
+                span.record_exception(e)
+                await message.reject(requeue=True)
+                raise
+
+    @override
+    async def add_session(self, user_id: int, session: str) -> None:
+        with self.tracer.start_as_current_span("session_storage.add_session") as span:
+            span.set_attribute("messaging.system", "rabbitmq")
+            span.set_attribute(
+                "messaging.destination", self.settings.session_storage_queue_name
+            )
+            span.set_attribute("messaging.operation", "publish")
+            span.set_attribute("session.user_id", user_id)
+
+            logger = self.logger.bind(
+                user_id=user_id, queue=self.settings.session_storage_queue_name
+            )
+
+            await self.setup(self._channel, self.settings, logger)
+
+            logger.info("adding_session", stage="start")
+            span.add_event("add_started")
+
+            telegram_session = TelegramSession(
+                user_id=user_id,
+                session=StringSession(session),
             )
             await self._channel.default_exchange.publish(
                 aio_pika.Message(
@@ -164,75 +278,5 @@ class RabbitMQSessionStorage(ITelegramSessionStorage):
                 ),
                 routing_key=self.settings.session_storage_queue_name,
             )
-
-            await message.ack()
-
-        except ClientBanned as e:
-            # Бан
-            self.logger.warning(
-                f"⚠️ Client is banned, user_id: {telegram_session.user_id}. "
-                + "Removing session from queue."
-            )
-
-            await message.ack()
-            raise InvalidClient("Client is banned", telegram_session.user_id) from e
-
-        except InvalidClient as e:
-            # Не валидная сессия
-            self.logger.warning(
-                f"⚠️ Client is invalid, user_id: {telegram_session.user_id}. "
-                + "Removing session from queue."
-            )
-            await message.ack()
-            raise InvalidClient(e.message, telegram_session.user_id) from e
-
-        except FloodWait as e:
-            # Флуд
-            delay_ms = (e.seconds + 10) * 1000
-            self.logger.warning(
-                f"⏳ FloodWait {e.seconds}s, user_id: {telegram_session.user_id}. "
-                + f"Delaying for {delay_ms}ms"
-            )
-
-            delayed_exchange = await self._channel.get_exchange(
-                self.settings.session_storage_delayed_exchange_name
-            )
-            await delayed_exchange.publish(
-                aio_pika.Message(
-                    body=TelegramSession.model_dump_json(telegram_session).encode(),
-                    delivery_mode=aio_pika.DeliveryMode.PERSISTENT,
-                    headers={"x-delay": delay_ms},
-                ),
-                routing_key=self.settings.session_storage_queue_name,
-            )
-
-            await message.ack()
-            raise
-
-        except Exception:
-            # Если упало что-то внутри бизнес-логики (не связанное с сессией),
-            # возвращаем сообщение в очередь.
-            self.logger.error(
-                "❌ Unhandled exception during session usage", exc_info=True
-            )
-            await message.reject(requeue=True)
-            raise
-
-    @override
-    async def add_session(self, user_id: int, session: str) -> None:
-        await self.setup(self._channel, self.settings, self.logger)
-
-        self.logger.info(f"⌛ Adding session for user_id: {user_id}")
-        telegram_session = TelegramSession(
-            user_id=user_id,
-            session=StringSession(session),
-        )
-        await self._channel.default_exchange.publish(
-            aio_pika.Message(
-                body=TelegramSession.model_dump_json(telegram_session).encode(),
-                delivery_mode=aio_pika.DeliveryMode.PERSISTENT,
-                content_type="application/json",
-            ),
-            routing_key=self.settings.session_storage_queue_name,
-        )
-        self.logger.info(f"✅ Session for user_id: {user_id} added")
+            logger.info("session_added", stage="success")
+            span.add_event("add_completed")

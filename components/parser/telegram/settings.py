@@ -12,6 +12,7 @@ class TelegramSettings(BaseSettings):
         case_sensitive=False,
         extra="ignore",
     )
+    save_telegram_responses: bool = False
 
     session_storage_queue_name: str = "telegram.session_storage.queue"
     session_storage_delayed_exchange_name: str = (

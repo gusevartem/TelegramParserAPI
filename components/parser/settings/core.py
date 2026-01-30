@@ -14,6 +14,8 @@ class ProjectSettings(BaseSettings):
     )
 
     debug: bool = False
+    log_exporter_endpoint: str | None = None
+    trace_exporter_endpoint: str | None = None
 
 
 class ProjectSettingsProvider(Provider):

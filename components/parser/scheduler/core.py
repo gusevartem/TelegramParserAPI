@@ -95,11 +95,13 @@ class GetTasks:
     def __init__(self, parsing_task_dao: ParsingTaskDAO):
         self.parsing_task_dao: ParsingTaskDAO = parsing_task_dao
 
-    async def __call__(self, set_processing: bool) -> AsyncIterable[ParsingTaskDTO]:
+    async def __call__(
+        self, set_processing: bool, tasks_limit: int
+    ) -> AsyncIterable[ParsingTaskDTO]:
         now = datetime.now(timezone.utc)
         current_minute = now.hour * 60 + now.minute
         tasks_persistence = await self.parsing_task_dao.get_scheduled_tasks(
-            current_minute_of_day=current_minute
+            current_minute_of_day=current_minute, limit=tasks_limit
         )
         for task in tasks_persistence:
             if set_processing:

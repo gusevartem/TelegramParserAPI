@@ -1,13 +1,14 @@
 import tempfile
-import time
 from collections.abc import AsyncIterator
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
-from logging import Logger, getLogger
 from typing import Protocol, override
 
 import aio_pika
+import structlog
 from dishka import Provider, Scope, provide
 from dishka.dependency_source import CompositeDependencySource
+from opentelemetry import trace
+from opentelemetry.trace import Status, StatusCode
 from parser.dto import ProxySettings, TelegramCredentials
 from parser.persistence import TelegramClientDAOFactory
 from telethon.sessions.sqlite import SQLiteSession
@@ -53,7 +54,9 @@ class Telegram(ITelegram):
         self.session_storage: ITelegramSessionStorage = session_storage
         self.telegram_client_factory: ITelegramClientFactory = telegram_client_factory
         self.settings: TelegramSettings = settings
-        self.logger: Logger = getLogger(__name__)
+
+        self.logger: structlog.BoundLogger = structlog.get_logger("telegram_pool")
+        self.tracer: trace.Tracer = trace.get_tracer("telegram_pool")
 
     @override
     async def add_client(
@@ -62,141 +65,196 @@ class Telegram(ITelegram):
         credentials: TelegramCredentials | None = None,
         proxy: ProxySettings | None = None,
     ) -> None:
-        self.logger.info("⌛ Adding client")
+        with self.tracer.start_as_current_span("telegram.add_client") as span:
+            span.set_attribute("telegram.proxy_provided", proxy is not None)
+            logger = self.logger.bind(proxy_provided=proxy is not None)
 
-        start_time = time.perf_counter()
-        with tempfile.NamedTemporaryFile(suffix=".session") as session_temp_file:
-            self.logger.info("⌛ Creating temporary session file")
-            session_temp_file.write(session_data)
+            logger.info("adding_client", stage="start")
+            span.add_event("add_client_started")
 
-            credentials = credentials or self.settings.default_credentials
+            with tempfile.NamedTemporaryFile(suffix=".session") as session_temp_file:
+                logger.info("creating_temporary_session_file")
+                session_temp_file.write(session_data)
+                session_temp_file.flush()
 
-            session = SQLiteSession(session_temp_file.name)
-            client = self.telegram_client_factory(
-                session=session,
-                credentials=credentials,
-                proxy=proxy,
-            )
-            async with client:
-                me = await client.get_me()
-                if me.phone is None:
-                    raise InvalidClient("Client does not have phone number")
+                credentials = credentials or self.settings.default_credentials
 
-                self.logger.info("✅ Client working")
-                async with self.telegram_client_dao_factory() as telegram_client_dao:
-                    existing_client = await telegram_client_dao.find_by_id(me.id)
-                    if existing_client is not None:
-                        raise InvalidClient("Client already exists")
+                session = SQLiteSession(session_temp_file.name)
+                client = self.telegram_client_factory(
+                    session=session,
+                    credentials=credentials,
+                    proxy=proxy,
+                    settings=self.settings,
+                )
+                async with client:
+                    me = await client.get_me()
+                    if me.phone is None:
+                        logger.error("client_no_phone_number")
+                        span.set_status(
+                            Status(StatusCode.ERROR, "Client has no phone number")
+                        )
+                        raise InvalidClient("Client does not have phone number")
 
-                    self.logger.info("⌛ Adding client to database")
-                    await telegram_client_dao.create(
-                        telegram_id=me.id,
-                        phone=me.phone,
-                        api_id=credentials.api_id,
-                        api_hash=credentials.api_hash,
-                        device_model=credentials.device_model,
-                        system_version=credentials.system_version,
-                        app_version=credentials.app_version,
-                        lang_code=credentials.lang_code,
-                        system_lang_code=credentials.system_lang_code,
-                        proxy=ProxySettings.to_persistence(proxy)
-                        if proxy is not None
-                        else None,
+                    logger.info(
+                        "client_validation_success", user_id=me.id, phone=me.phone
                     )
-                    await telegram_client_dao.commit()
+                    span.set_attribute("telegram.user_id", me.id)
+                    span.set_attribute("telegram.phone", me.phone)
 
-                    self.logger.info("⌛ Adding client to session storage")
-                    string_session = StringSession()
-                    string_session.set_dc(
-                        session.dc_id, session.server_address, session.port
-                    )
-                    string_session.auth_key = session.auth_key
+                    async with (
+                        self.telegram_client_dao_factory() as telegram_client_dao
+                    ):
+                        existing_client = await telegram_client_dao.find_by_id(me.id)
+                        if existing_client is not None:
+                            logger.error("client_already_exists", user_id=me.id)
+                            span.set_status(
+                                Status(StatusCode.ERROR, "Client already exists")
+                            )
+                            raise InvalidClient("Client already exists")
 
-                    await self.session_storage.add_session(me.id, string_session.save())
+                        logger.info("saving_client_to_database", user_id=me.id)
+                        await telegram_client_dao.create(
+                            telegram_id=me.id,
+                            phone=me.phone,
+                            api_id=credentials.api_id,
+                            api_hash=credentials.api_hash,
+                            device_model=credentials.device_model,
+                            system_version=credentials.system_version,
+                            app_version=credentials.app_version,
+                            lang_code=credentials.lang_code,
+                            system_lang_code=credentials.system_lang_code,
+                            proxy=ProxySettings.to_persistence(proxy)
+                            if proxy is not None
+                            else None,
+                        )
+                        await telegram_client_dao.commit()
 
-        duration = (time.perf_counter() - start_time) * 1000
-        self.logger.info(f"✅ Client added successfully. Duration: {duration:.0f}ms")
+                        logger.info("saving_session_to_storage", user_id=me.id)
+                        string_session = StringSession()
+                        string_session.set_dc(
+                            session.dc_id, session.server_address, session.port
+                        )
+                        string_session.auth_key = session.auth_key
+
+                        await self.session_storage.add_session(
+                            me.id, string_session.save()
+                        )
+
+            logger.info("client_added_successfully", user_id=me.id, phone=me.phone)
+            span.add_event("add_client_completed")
 
     @override
     @asynccontextmanager
     async def get_client(self, timeout: int = 5) -> AsyncIterator[ITelegramClient]:
-        async with self.telegram_client_dao_factory() as telegram_client_dao:
-            if not await telegram_client_dao.is_working_clients_exists():
-                raise NoWorkingClientsFoundError("No working clients found in database")
+        with self.tracer.start_as_current_span("telegram.get_client") as span:
+            span.set_attribute("telegram.session_timeout_seconds", timeout)
+            logger = self.logger.bind(timeout=timeout)
 
-        try:
-            async with self.session_storage.get_session(timeout) as session_container:
-                async with self.telegram_client_dao_factory() as telegram_client_dao:
-                    client_info = await telegram_client_dao.find_with_proxy(
-                        session_container.user_id
+            async with self.telegram_client_dao_factory() as telegram_client_dao:
+                if not await telegram_client_dao.is_working_clients_exists():
+                    logger.error("no_working_clients_found")
+                    span.set_status(Status(StatusCode.ERROR, "No working clients"))
+                    raise NoWorkingClientsFoundError(
+                        "No working clients found in database"
                     )
-                    if client_info is None:
-                        self.logger.info(
-                            f"❌ Client with id: {session_container.user_id} "
-                            + "not found in database. Deleting from session storage"
+
+            try:
+                async with self.session_storage.get_session(
+                    timeout
+                ) as session_container:
+                    async with (
+                        self.telegram_client_dao_factory() as telegram_client_dao
+                    ):
+                        client_info = await telegram_client_dao.find_with_proxy(
+                            session_container.user_id
                         )
-                        raise InvalidClient(
-                            "Client from session storage not found in database"
+                        if client_info is None:
+                            logger.warning(
+                                "client_not_found_in_db",
+                                user_id=session_container.user_id,
+                                next_action="delete_from_session_storage",
+                            )
+                            span.set_status(
+                                Status(StatusCode.ERROR, "Client not in DB")
+                            )
+                            raise InvalidClient(
+                                "Client from session storage not found in database"
+                            )
+                        if client_info.banned:
+                            logger.warning(
+                                "client_banned",
+                                user_id=session_container.user_id,
+                                next_action="delete_from_session_storage",
+                            )
+                            span.set_status(Status(StatusCode.ERROR, "Client banned"))
+                            raise InvalidClient("Client from session storage is banned")
+
+                        client = self.telegram_client_factory(
+                            settings=self.settings,
+                            session=session_container.session,
+                            credentials=TelegramCredentials(
+                                api_id=client_info.api_id,
+                                api_hash=client_info.api_hash,
+                                device_model=client_info.device_model,
+                                system_version=client_info.system_version,
+                                app_version=client_info.app_version,
+                                lang_code=client_info.lang_code,
+                                system_lang_code=client_info.system_lang_code,
+                            ),
+                            proxy=ProxySettings.from_persistence(client_info.proxy)
+                            if client_info.proxy is not None
+                            else None,
                         )
-                    if client_info.banned:
-                        self.logger.info(
-                            f"❌ Client with id: {session_container.user_id} "
-                            + "is banned. Deleting from session storage"
+
+                    async with client:
+                        logger.info(
+                            "client_acquired",
+                            user_id=session_container.user_id,
+                            phone=client_info.phone,
+                            stage="start",
                         )
-                        raise InvalidClient("Client from session storage is banned")
+                        span.set_attribute(
+                            "telegram.user_id", session_container.user_id
+                        )
+                        span.set_attribute(
+                            "telegram.phone", client_info.phone or "none"
+                        )
+                        span.add_event("client_acquired")
 
-                    client = self.telegram_client_factory(
-                        session=session_container.session,
-                        credentials=TelegramCredentials(
-                            api_id=client_info.api_id,
-                            api_hash=client_info.api_hash,
-                            device_model=client_info.device_model,
-                            system_version=client_info.system_version,
-                            app_version=client_info.app_version,
-                            lang_code=client_info.lang_code,
-                            system_lang_code=client_info.system_lang_code,
-                        ),
-                        proxy=ProxySettings.from_persistence(client_info.proxy)
-                        if client_info.proxy is not None
-                        else None,
+                        yield client
+
+                        logger.info(
+                            "client_usage_completed",
+                            user_id=session_container.user_id,
+                            phone=client_info.phone,
+                        )
+                        span.add_event("client_usage_completed")
+
+                    session_container.session.set_dc(
+                        client.current_session.dc_id,
+                        client.current_session.server_address,
+                        client.current_session.port,
                     )
+                    session_container.session.auth_key = client.current_session.auth_key
 
-                async with client:
-                    self.logger.info(
-                        f"🚀 Starting usage of client: {session_container.user_id}. "
-                        + f"Phone: {client_info.phone}"
-                    )
-                    start_time = time.perf_counter()
+            except InvalidClient as e:
+                if e.user_id is not None:
+                    async with (
+                        self.telegram_client_dao_factory() as telegram_client_dao
+                    ):
+                        telegram_client = await telegram_client_dao.find_by_id(
+                            e.user_id
+                        )
+                        if telegram_client is not None:
+                            logger.info("banning_client", user_id=e.user_id)
 
-                    yield client
+                            telegram_client.banned = True
+                            await telegram_client_dao.save(telegram_client)
+                            await telegram_client_dao.commit()
 
-                    duration = (time.perf_counter() - start_time) * 1000
-                    self.logger.info(
-                        f"🏁 Finished usage of client: {session_container.user_id}. "
-                        + f"Phone: {client_info.phone}. "
-                        + f"Duration: {duration:.0f}ms"
-                    )
-
-                session_container.session.set_dc(
-                    client.current_session.dc_id,
-                    client.current_session.server_address,
-                    client.current_session.port,
-                )
-                session_container.session.auth_key = client.current_session.auth_key
-
-        except InvalidClient as e:
-            if e.user_id is not None:
-                async with self.telegram_client_dao_factory() as telegram_client_dao:
-                    telegram_client = await telegram_client_dao.find_by_id(e.user_id)
-                    if telegram_client is not None:
-                        self.logger.info(f"⌛ Banning client: {e.user_id}")
-
-                        telegram_client.banned = True
-                        await telegram_client_dao.save(telegram_client)
-                        await telegram_client_dao.commit()
-
-                        self.logger.info(f"✅ Client banned: {e.user_id}")
-            raise
+                            logger.info("client_banned", user_id=e.user_id)
+                span.set_status(Status(StatusCode.ERROR, str(e)))
+                raise
 
 
 class TelegramProvider(Provider):

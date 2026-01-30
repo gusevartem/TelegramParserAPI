@@ -1,9 +1,11 @@
 from collections.abc import AsyncIterable
-from logging import getLogger
 from typing import NewType
 
+import structlog
 from dishka import Provider, Scope, provide, provide_all
 from dishka.dependency_source import CompositeDependencySource
+from opentelemetry import trace
+from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
 from parser.settings import ProjectSettings
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
@@ -72,10 +74,10 @@ class PersistenceProvider(Provider):
         project_settings: ProjectSettings,
         persistence_settings: PersistenceSettings,
     ) -> DatabaseUrl:
+        logger = structlog.get_logger("persistence")
         if project_settings.debug:
             url = "sqlite+aiosqlite:///:memory:"
-            logger = getLogger(__name__)
-            logger.info("⚠️  DEBUG MODE: Using in-memory SQLite database")
+            logger.info("using_database", mode="debug", database_type="sqlite_memory")
         else:
             if any(
                 parameter is None
@@ -105,7 +107,7 @@ class PersistenceProvider(Provider):
         project_settings: ProjectSettings,
     ) -> AsyncIterable[AsyncEngine]:
         register_model()
-        logger = getLogger(__name__)
+        logger = structlog.get_logger("persistence")
         engine = create_async_engine(
             database_url,
             echo=False,
@@ -115,15 +117,21 @@ class PersistenceProvider(Provider):
             connect_args={"init_command": "SET time_zone = '+00:00'"},
             isolation_level="READ COMMITTED",
         )
-        logger.info("Database engine created")
+        SQLAlchemyInstrumentor().instrument(
+            engine=engine,
+            tracer_provider=trace.get_tracer_provider(),
+            enable_commenter=True,
+            commenter_options={"trace_id": True, "span_id": True},
+        )
+        logger.info("database_engine_created")
         if project_settings.debug:
-            logger.info("⚠️  DEBUG MODE: Creating all tables in the database")
+            logger.info("creating_all_tables", mode="debug")
             async with engine.begin() as conn:
                 await conn.run_sync(BaseModel.metadata.create_all)
         try:
             yield engine
         finally:
-            logger.info("Disposing database engine")
+            logger.info("disposing_database_engine")
             await engine.dispose()
 
     @provide(scope=Scope.APP)

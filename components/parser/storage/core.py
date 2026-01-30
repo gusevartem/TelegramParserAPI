@@ -1,12 +1,13 @@
 import asyncio
-import time
 from io import BytesIO
-from logging import Logger, getLogger
 from typing import Protocol, override
 
+import structlog
 from aioboto3 import Session
 from botocore.exceptions import ClientError
 from dishka import Provider, Scope, provide
+from opentelemetry import trace
+from opentelemetry.trace import Status, StatusCode
 
 from . import exceptions
 from .settings import StorageSettings
@@ -24,136 +25,213 @@ class IStorage(Protocol):
 
 class Storage(IStorage):
     def __init__(self, storage_settings: StorageSettings) -> None:
-        self.storage_settings: StorageSettings = storage_settings
+        self.settings: StorageSettings = storage_settings
         self.s3: Session = Session(
             aws_access_key_id=storage_settings.s3_access_key,
             aws_secret_access_key=storage_settings.s3_secret_key,
             region_name=storage_settings.s3_region_name,
         )
-        self.logger: Logger = getLogger(__name__)
+        self.logger: structlog.BoundLogger = structlog.get_logger("storage")
+        self.tracer: trace.Tracer = trace.get_tracer("storage")
 
     @override
     async def save_media(
         self, data: bytes, file_name: str, max_retries: int = 3
     ) -> None:
-        self.logger.info(f"⌛ Uploading file: {file_name} ({len(data)} bytes)")
-
-        start_time = time.perf_counter()
-        file_size = len(data)
-        if file_size > self.storage_settings.max_file_size_bytes:
-            raise exceptions.MediaTooLargeError(
-                file_name, self.storage_settings.max_file_size_bytes, file_size
+        with self.tracer.start_as_current_span("storage.upload_media") as span:
+            span.set_attribute("storage.system", "s3")
+            span.set_attribute("storage.bucket", self.settings.s3_bucket_name)
+            span.set_attribute("storage.operation", "upload")
+            span.set_attribute("storage.file_name", file_name)
+            span.set_attribute("storage.file_size_bytes", len(data))
+            logger = self.logger.bind(
+                file_name=file_name,
+                file_size_bytes=len(data),
+                bucket=self.settings.s3_bucket_name,
             )
 
-        for attempt in range(max_retries):
-            try:
-                async with self._get_client() as s3_client:
-                    await s3_client.upload_fileobj(
-                        BytesIO(data), self.storage_settings.s3_bucket_name, file_name
-                    )
-                duration = (time.perf_counter() - start_time) * 1000
-
-                self.logger.info(
-                    f"✅ Uploaded file: {file_name} ({len(data)} bytes). "
-                    + f"Duration: {duration:.0f}ms"
+            file_size = len(data)
+            if file_size > self.settings.max_file_size_bytes:
+                logger.error(
+                    "media_too_large",
+                    max_size_bytes=self.settings.max_file_size_bytes,
+                    actual_size_bytes=file_size,
                 )
-                return
-
-            except ClientError as e:
-                code = e.response.get("Error", {}).get("Code")
-                if code == "AccessDenied":
-                    raise exceptions.ConfigError(f"S3 Access Denied: {e}")
-                elif code == "NoSuchBucket":
-                    raise exceptions.ConfigError(
-                        f"Bucket {self.storage_settings.s3_bucket_name} not found"
-                    )
-                else:
-                    wait = 2**attempt
-                    self.logger.warning(
-                        f"⚠️ S3 Error {code}. "
-                        + f"Retry {attempt + 1}/{max_retries} after {wait}s"
-                    )
-                    await asyncio.sleep(wait)
-
-            except Exception as e:
-                wait = 2**attempt
-                self.logger.warning(
-                    f"⚠️ Error while trying to upload file ({type(e).__name__}). "
-                    + f"Retry {attempt + 1}/{max_retries} after {wait}s. "
-                    + f"Error: {e}"
+                span.set_status(Status(StatusCode.ERROR, "Media too large"))
+                raise exceptions.MediaTooLargeError(
+                    file_name, self.settings.max_file_size_bytes, file_size
                 )
-                await asyncio.sleep(wait)
 
-        raise exceptions.MaxRetriesExceededError(max_retries)
+            logger.info("uploading_media", stage="start")
+            span.add_event("upload_started")
+
+            for attempt in range(1, max_retries + 1):
+                try:
+                    async with self._get_client() as s3_client:
+                        await s3_client.upload_fileobj(
+                            BytesIO(data), self.settings.s3_bucket_name, file_name
+                        )
+                    logger.info(
+                        "media_uploaded",
+                        stage="success",
+                        attempt=attempt,
+                    )
+                    span.add_event("upload_completed")
+                    return
+
+                except ClientError as e:
+                    code = e.response.get("Error", {}).get("Code", "Unknown")
+                    if code in {"AccessDenied", "NoSuchBucket"}:
+                        logger.error("s3_config_error", error_code=code, exc_info=True)
+                        span.set_status(
+                            Status(StatusCode.ERROR, f"S3 config error: {code}")
+                        )
+                        span.record_exception(e)
+                        raise exceptions.ConfigError(f"S3 {code}: {e}") from e
+
+                    wait = 2 ** (attempt - 1)
+                    logger.warning(
+                        "upload_retry",
+                        attempt=attempt,
+                        max_attempts=max_retries,
+                        wait_seconds=wait,
+                        error_code=code,
+                    )
+                    span.add_event(
+                        "upload_retry", {"attempt": attempt, "wait_seconds": wait}
+                    )
+                    if attempt < max_retries:
+                        await asyncio.sleep(wait)
+
+                except Exception as e:
+                    wait = 2 ** (attempt - 1)
+                    logger.warning(
+                        "upload_retry",
+                        attempt=attempt,
+                        max_attempts=max_retries,
+                        wait_seconds=wait,
+                        error_type=type(e).__name__,
+                        exc_info=True,
+                    )
+                    span.add_event(
+                        "upload_retry", {"attempt": attempt, "wait_seconds": wait}
+                    )
+                    if attempt < max_retries:
+                        await asyncio.sleep(wait)
+
+            logger.error("upload_max_retries_exceeded", max_attempts=max_retries)
+            span.set_status(Status(StatusCode.ERROR, "Max retries exceeded"))
+            raise exceptions.MaxRetriesExceededError(max_retries)
 
     @override
     async def generate_presigned_url(
         self, file_name: str, expires_seconds: int = 3600, max_retries: int = 3
     ) -> str:
-        self.logger.info(f"⌛ Generating presigned url for media {file_name}")
+        with self.tracer.start_as_current_span(
+            "storage.generate_presigned_url"
+        ) as span:
+            span.set_attribute("storage.system", "s3")
+            span.set_attribute("storage.bucket", self.settings.s3_bucket_name)
+            span.set_attribute("storage.operation", "presign")
+            span.set_attribute("storage.file_name", file_name)
+            span.set_attribute("storage.url_expires_seconds", expires_seconds)
 
-        start_time = time.perf_counter()
-        for attempt in range(max_retries):
-            try:
-                async with self._get_client() as s3_client:
-                    try:
-                        await s3_client.head_object(
-                            Bucket=self.storage_settings.s3_bucket_name, Key=file_name
+            logger = self.logger.bind(
+                file_name=file_name,
+                bucket=self.settings.s3_bucket_name,
+                expires_seconds=expires_seconds,
+            )
+
+            logger.info("generating_presigned_url", stage="start")
+            span.add_event("presign_started")
+
+            for attempt in range(1, max_retries + 1):
+                try:
+                    async with self._get_client() as s3_client:
+                        try:
+                            await s3_client.head_object(
+                                Bucket=self.settings.s3_bucket_name, Key=file_name
+                            )
+                        except ClientError as head_e:
+                            code = head_e.response.get("Error", {}).get("Code")
+                            if code in {"404", "NoSuchKey"}:
+                                logger.error("media_not_found", file_name=file_name)
+                                span.set_status(
+                                    Status(StatusCode.ERROR, "Media not found")
+                                )
+                                raise exceptions.MediaNotFoundError(
+                                    file_name
+                                ) from head_e
+                            raise head_e
+
+                        url = await s3_client.generate_presigned_url(
+                            ClientMethod="get_object",
+                            Params={
+                                "Bucket": self.settings.s3_bucket_name,
+                                "Key": file_name,
+                            },
+                            ExpiresIn=expires_seconds,
                         )
-                    except ClientError as e:
-                        if e.response.get("Error", {}).get("Code") == "404":
-                            raise exceptions.MediaNotFoundError(file_name)
-                        raise e
 
-                    url = await s3_client.generate_presigned_url(
-                        ClientMethod="get_object",
-                        Params={
-                            "Bucket": self.storage_settings.s3_bucket_name,
-                            "Key": file_name,
-                        },
-                        ExpiresIn=expires_seconds,
+                    logger.info(
+                        "presigned_url_generated",
+                        stage="success",
+                        attempt=attempt,
                     )
+                    span.add_event("presign_completed")
+                    return url
 
-                duration = (time.perf_counter() - start_time) * 1000
-                self.logger.info(
-                    f"✅ Generated presigned url for media {file_name}. "
-                    + f"Duration: {duration:.0f}ms"
-                )
-                return url
+                except ClientError as e:
+                    code = e.response.get("Error", {}).get("Code", "Unknown")
+                    if code in {"AccessDenied", "NoSuchBucket"}:
+                        logger.error("s3_config_error", error_code=code, exc_info=True)
+                        span.set_status(
+                            Status(StatusCode.ERROR, f"S3 config error: {code}")
+                        )
+                        span.record_exception(e)
+                        raise exceptions.ConfigError(f"S3 {code}: {e}") from e
+                    if code in {"404", "NoSuchKey"}:
+                        logger.error("media_not_found", file_name=file_name)
+                        span.set_status(Status(StatusCode.ERROR, "Media not found"))
+                        raise exceptions.MediaNotFoundError(file_name) from e
 
-            except ClientError as e:
-                code = e.response.get("Error", {}).get("Code")
-
-                if code == "AccessDenied":
-                    raise exceptions.ConfigError(f"S3 Access Denied: {e}")
-                elif code == "NoSuchBucket":
-                    raise exceptions.ConfigError(
-                        f"Bucket {self.storage_settings.s3_bucket_name} not found"
+                    wait = 2 ** (attempt - 1)
+                    logger.warning(
+                        "presign_retry",
+                        attempt=attempt,
+                        max_attempts=max_retries,
+                        wait_seconds=wait,
+                        error_code=code,
                     )
-                elif code == "NoSuchKey" or code == "404":
-                    raise exceptions.MediaNotFoundError(file_name)
-                else:
-                    wait = 2**attempt
-                    self.logger.warning(
-                        f"⚠️ S3 Error {code} during URL gen. "
-                        + f"Retry {attempt + 1}/{max_retries} after {wait}s"
+                    span.add_event(
+                        "presign_retry", {"attempt": attempt, "wait_seconds": wait}
                     )
-                    await asyncio.sleep(wait)
+                    if attempt < max_retries:
+                        await asyncio.sleep(wait)
 
-            except Exception as e:
-                wait = 2**attempt
-                self.logger.warning(
-                    f"⚠️ Error generating URL ({type(e).__name__}). "
-                    + f"Retry {attempt + 1}/{max_retries} after {wait}s. "
-                    + f"Error: {e}"
-                )
-                await asyncio.sleep(wait)
+                except Exception as e:
+                    wait = 2 ** (attempt - 1)
+                    logger.warning(
+                        "presign_retry",
+                        attempt=attempt,
+                        max_attempts=max_retries,
+                        wait_seconds=wait,
+                        error_type=type(e).__name__,
+                        exc_info=True,
+                    )
+                    span.add_event(
+                        "presign_retry", {"attempt": attempt, "wait_seconds": wait}
+                    )
+                    if attempt < max_retries:
+                        await asyncio.sleep(wait)
 
-        raise exceptions.MaxRetriesExceededError(max_retries)
+            logger.error("presign_max_retries_exceeded", max_attempts=max_retries)
+            span.set_status(Status(StatusCode.ERROR, "Max retries exceeded"))
+            raise exceptions.MaxRetriesExceededError(max_retries)
 
     def _get_client(self):
         return self.s3.client(
-            service_name="s3", endpoint_url=self.storage_settings.s3_endpoint_url
+            service_name="s3", endpoint_url=self.settings.s3_endpoint_url
         )
 
 

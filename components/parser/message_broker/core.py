@@ -1,12 +1,15 @@
 import asyncio
 from collections.abc import AsyncIterator
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
-from logging import Logger, getLogger
 from typing import ClassVar, NewType, Protocol, override
 
 import aio_pika
+import structlog
 from dishka import Provider, Scope, provide
 from dishka.dependency_source import CompositeDependencySource
+from opentelemetry import trace
+from opentelemetry.instrumentation.aio_pika import AioPikaInstrumentor
+from opentelemetry.trace import Status, StatusCode
 from parser.dto import ParsingTask
 from pydantic import ValidationError
 
@@ -30,94 +33,151 @@ class MessageBroker(IMessageBroker):
     def __init__(self, channel: BrokerChannel, settings: MessageBrokerSettings) -> None:
         self._channel: aio_pika.abc.AbstractChannel = channel
         self.settings: MessageBrokerSettings = settings
-        self.logger: Logger = getLogger(__name__)
+        self.logger: structlog.BoundLogger = structlog.get_logger("message_broker")
+        self.tracer: trace.Tracer = trace.get_tracer("message_broker")
 
     @classmethod
     async def setup(
         cls,
         channel: aio_pika.abc.AbstractChannel,
         settings: MessageBrokerSettings,
-        logger: Logger,
+        logger: structlog.BoundLogger,
     ):
         if cls._configured:
             return
-        logger.info("⌛ Configuring message broker")
-        logger.info(f"⌛ Declaring tasks queue: {settings.parsing_tasks_queue_name}")
+
+        logger.info("configuring_message_broker", stage="start")
+        logger.info(
+            "declaring_tasks_queue",
+            queue_name=settings.parsing_tasks_queue_name,
+            queue_type="quorum",
+        )
         await channel.declare_queue(
             settings.parsing_tasks_queue_name,
             durable=True,
             arguments={"x-queue-type": "quorum"},
         )
 
-        logger.info("✅ Message broker configured")
+        logger.info("message_broker_configured", stage="complete")
         cls._configured = True
 
     @override
     async def publish_task(self, task: ParsingTask) -> None:
-        await self.setup(self._channel, self.settings, self.logger)
+        with self.tracer.start_as_current_span("message_broker.publish_task") as span:
+            span.set_attribute("messaging.system", "rabbitmq")
+            span.set_attribute(
+                "messaging.destination", self.settings.parsing_tasks_queue_name
+            )
+            span.set_attribute("messaging.operation", "publish")
+            span.set_attribute("task.id", str(task.id))
+            span.set_attribute("task.url", task.url)
 
-        self.logger.info(f"⌛ Publishing task with id: {task.id}")
-        await self._channel.default_exchange.publish(
-            aio_pika.Message(
-                body=ParsingTask.model_dump_json(task).encode(),
-                delivery_mode=aio_pika.DeliveryMode.PERSISTENT,
-                content_type="application/json",
-            ),
-            routing_key=self.settings.parsing_tasks_queue_name,
-        )
-        self.logger.info(f"✅ Task with id: {task.id} published")
+            task_logger = self.logger.bind(
+                task_id=str(task.id),
+                task_url=task.url,
+                queue=self.settings.parsing_tasks_queue_name,
+            )
+
+            await self.setup(self._channel, self.settings, task_logger)
+
+            task_logger.info("publishing_task", stage="start")
+            span.add_event("publish_started")
+            try:
+                await self._channel.default_exchange.publish(
+                    aio_pika.Message(
+                        body=ParsingTask.model_dump_json(task).encode(),
+                        delivery_mode=aio_pika.DeliveryMode.PERSISTENT,
+                        content_type="application/json",
+                    ),
+                    routing_key=self.settings.parsing_tasks_queue_name,
+                )
+                task_logger.info("task_published", stage="success")
+                span.add_event("publish_completed")
+            except Exception as e:
+                span.set_status(Status(StatusCode.ERROR, str(e)))
+                span.record_exception(e)
+                task_logger.error("task_publish_failed", exc_info=True)
+                raise
 
     @override
     @asynccontextmanager
     async def get_task(self, timeout: int = 5) -> AsyncIterator[ParsingTask]:
-        await self.setup(self._channel, self.settings, self.logger)
+        with self.tracer.start_as_current_span("message_broker.get_task") as span:
+            span.set_attribute("messaging.system", "rabbitmq")
+            span.set_attribute(
+                "messaging.destination", self.settings.parsing_tasks_queue_name
+            )
+            span.set_attribute("messaging.operation", "consume")
+            span.set_attribute("consume.timeout_seconds", timeout)
 
-        queue = await self._channel.get_queue(self.settings.parsing_tasks_queue_name)
+            logger = self.logger.bind(
+                queue=self.settings.parsing_tasks_queue_name, timeout=timeout
+            )
 
-        self.logger.info(f"⌛ Getting task with timeout: {timeout}")
+            await self.setup(self._channel, self.settings, logger)
 
-        async with queue.iterator() as queue_iter:
-            try:
-                self.logger.info(
-                    "⌛ Waiting for task in queue: "
-                    + f"{self.settings.parsing_tasks_queue_name}"
-                )
-                message = await asyncio.wait_for(
-                    queue_iter.__anext__(), timeout=timeout
-                )
-            except (asyncio.TimeoutError, StopAsyncIteration) as e:
-                self.logger.info(
-                    "⚠️ Cannot get task from queue "
-                    + f"{self.settings.parsing_tasks_queue_name}, timeout: {timeout}"
-                )
-                raise TimeoutError("Cannot get task from queue") from e
+            logger.info("waiting_for_task", stage="start")
+            span.add_event("consume_started")
 
-        async with message.process(ignore_processed=True, requeue=True):
-            try:
-                task = ParsingTask.model_validate_json(message.body.decode())
-            except ValidationError as e:
-                self.logger.error(
-                    f"❌ Unexpected message in task queue: {str(e)}",
-                    exc_info=True,
-                )
-                await message.reject(requeue=False)
-                raise InvalidMessageError(
-                    f"Unexpected message in task queue: {str(e)}"
-                ) from e
-            self.logger.info(f"✅ Got task with id: {task.id}. URL: {task.url}")
-            try:
-                yield task
-                self.logger.info(
-                    f"✅ Task with id: {task.id}, "
-                    + f"URL: {task.url} processed successfully"
-                )
-            except InvalidTask as e:
-                self.logger.error(f"❌ Invalid task: {str(e)}", exc_info=True)
-                await message.reject(requeue=False)
-                raise InvalidTask(f"Invalid task: {str(e)}") from e
-            except Exception:
-                self.logger.error("❌ Unexpected error, requeueing...")
-                raise
+            queue = await self._channel.get_queue(
+                self.settings.parsing_tasks_queue_name
+            )
+
+            async with queue.iterator() as queue_iter:
+                try:
+                    message = await asyncio.wait_for(
+                        queue_iter.__anext__(), timeout=timeout
+                    )
+                except (asyncio.TimeoutError, StopAsyncIteration) as e:
+                    logger.info("task_consume_timeout", timeout=timeout)
+                    span.add_event("consume_timeout")
+                    raise TimeoutError("Cannot get task from queue") from e
+
+            async with message.process(ignore_processed=True, requeue=True):
+                try:
+                    task = ParsingTask.model_validate_json(message.body.decode())
+                except ValidationError as e:
+                    logger.error(
+                        "invalid_message_received", error=str(e), exc_info=True
+                    )
+                    span.set_status(Status(StatusCode.ERROR, "Invalid message format"))
+                    span.record_exception(e)
+                    await message.reject(requeue=False)
+                    raise InvalidMessageError(
+                        f"Unexpected message in task queue: {str(e)}"
+                    ) from e
+
+                task_logger = logger.bind(task_id=str(task.id), task_url=task.url)
+                task_logger.info("task_received", stage="success")
+                span.set_attribute("task.id", str(task.id))
+                span.set_attribute("task.url", task.url)
+                span.add_event("task_received")
+
+                try:
+                    yield task
+
+                    task_logger.info("task_processed_successfully")
+                    span.add_event("task_processed_successfully")
+
+                except InvalidTask as e:
+                    task_logger.error("invalid_task", error=str(e), exc_info=True)
+                    span.set_status(Status(StatusCode.ERROR, str(e)))
+                    span.record_exception(e)
+
+                    await message.reject(requeue=False)
+                    raise
+                except Exception as e:
+                    task_logger.error(
+                        "task_processing_failed_requeueing", exc_info=True
+                    )
+                    span.set_status(
+                        Status(
+                            StatusCode.ERROR,
+                            "Unexpected error during task processing",
+                        )
+                    )
+                    span.record_exception(e)
+                    raise
 
 
 class MessageBrokerProvider(Provider):
@@ -129,6 +189,7 @@ class MessageBrokerProvider(Provider):
     async def connection(
         self, settings: MessageBrokerSettings
     ) -> AsyncIterator[aio_pika.abc.AbstractConnection]:
+        AioPikaInstrumentor().instrument()
         connection = await aio_pika.connect_robust(
             host=settings.rabbitmq_host,
             port=settings.rabbitmq_port,
