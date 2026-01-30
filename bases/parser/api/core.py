@@ -7,6 +7,7 @@ from dishka import make_async_container
 from dishka.integrations.fastapi import setup_dishka
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
+from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from parser.logging import setup_logging
 from parser.message_broker import MessageBrokerProvider
 from parser.persistence import PersistenceProvider
@@ -42,7 +43,7 @@ async def build_app() -> FastAPI:
     project_settings = await container.get(ProjectSettings)
     logger = getLogger("app")
 
-    setup_logging(project_settings)
+    setup_logging(project_settings, "api", version("api"))
 
     app = FastAPI(
         title=api_settings.app_name,
@@ -64,6 +65,8 @@ async def build_app() -> FastAPI:
             },
         },
     )
+
+    FastAPIInstrumentor.instrument_app(app)
 
     setup_dishka(container=container, app=app)
 

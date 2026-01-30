@@ -1,11 +1,12 @@
 import json
-import time
-from logging import getLogger
-from typing import Annotated, Any
+from typing import Annotated, Any, Final
 from uuid import UUID
 
+import structlog
 from dishka.integrations.fastapi import DishkaRoute, FromDishka
 from fastapi import APIRouter, Body, File, Form, Security, UploadFile, status
+from opentelemetry import trace
+from opentelemetry.trace import Status, StatusCode
 from parser.api.utils import (
     CustomHTTPException,
     ErrorResponse,
@@ -24,7 +25,8 @@ router = APIRouter(
     route_class=DishkaRoute,
 )
 
-logger = getLogger(__name__)
+logger: Final[structlog.BoundLogger] = structlog.get_logger("api.parser")
+tracer: Final[trace.Tracer] = trace.get_tracer("api.parser")
 
 
 @router.get("/task", status_code=status.HTTP_200_OK)
@@ -33,31 +35,36 @@ async def get_task(
     task_id: UUID = Body(..., description="Идентификатор задачи", embed=True),
     _: None = Security(secret_key_check),
 ) -> ParsingTask:
-    logger.info(f"⌛ Received get task request for task id: {task_id}")
+    with tracer.start_as_current_span("api.get_task") as span:
+        request_logger = logger.bind(task_id=task_id)
+        span.set_attribute("task.id", str(task_id))
+        request_logger.info("received_get_task_request", stage="start")
 
-    start_time = time.perf_counter()
-    result = await parsing_task_dao.find_by_id(task_id)
+        result = await parsing_task_dao.find_by_id(task_id)
 
-    if result is None:
-        raise CustomHTTPException(
-            error="TaskNotFound",
-            status_code=status.HTTP_404_NOT_FOUND,
-            message=f"Task with id {task_id} not found",
+        if result is None:
+            request_logger.info("task_not_found", stage="error")
+            span.set_status(status=Status(StatusCode.ERROR, "Task not found"))
+            raise CustomHTTPException(
+                error="TaskNotFound",
+                status_code=status.HTTP_404_NOT_FOUND,
+                message=f"Task with id {task_id} not found",
+            )
+        request_logger.info("task_found", stage="success", id=result.id, url=result.url)
+        span.set_attribute("task.id", str(result.id))
+        span.set_attribute("task.url", result.url)
+        span.add_event("task_found")
+        next_run = calculate_next_run(
+            bucket=result.bucket,
+            last_parsed_at=result.last_parsed_at,
+            created_at=result.created_at,
+            status=result.status,
         )
-    duration = (time.perf_counter() - start_time) * 1000
-    logger.info(
-        f"✅ Get task request for task id: {task_id} completed. "
-        + f"Duration: {duration:.0f}ms"
-    )
-    next_run = calculate_next_run(
-        bucket=result.bucket,
-        last_parsed_at=result.last_parsed_at,
-        created_at=result.created_at,
-        status=result.status,
-    )
-    return ParsingTask.from_persistence(
-        result, int(next_run.timestamp()) if next_run is not None else None
-    )
+        if next_run:
+            span.set_attribute("task.next_run", str(next_run))
+        return ParsingTask.from_persistence(
+            result, int(next_run.timestamp()) if next_run is not None else None
+        )
 
 
 @router.post("/schedule", status_code=status.HTTP_201_CREATED)
@@ -66,17 +73,20 @@ async def add_channel(
     channel_url: str = Body(..., description="Ссылка на канал", embed=True),
     _: None = Security(secret_key_check),
 ) -> ParsingTask:
-    logger.info(f"⌛ Received add channel request for channel link: {channel_url}")
+    with tracer.start_as_current_span("api.add_channel") as span:
+        request_logger = logger.bind(channel_url=channel_url)
+        span.set_attribute("channel.url", channel_url)
+        request_logger.info("received_add_channel_request", stage="start")
+        result = await add_task(channel_url)
 
-    start_time = time.perf_counter()
-    result = await add_task(channel_url)
-    duration = (time.perf_counter() - start_time) * 1000
-    logger.info(
-        f"✅ Add channel request for channel link: {channel_url} completed. "
-        + f"Duration: {duration:.0f}ms"
-    )
+        request_logger.info(
+            "channel_added", stage="success", id=result.id, url=result.url
+        )
+        span.set_attribute("task.id", str(result.id))
+        span.set_attribute("task.url", result.url)
+        span.add_event("channel_added")
 
-    return result
+        return result
 
 
 class AddClientRequest(BaseModel):
@@ -111,26 +121,28 @@ async def add_client(
     session: UploadFile = File(..., description="Файл сессии"),
     _: None = Security(secret_key_check),
 ) -> MessageResponse:
-    logger.info(
-        f"⌛ Received add client request with session: {session.filename}. "
-        + "Proxy: "
-        + f"{'Provided' if client_settings.proxy is not None else 'Not provided'}. "
-        + "Credentials: "
-        + f"{'Provided' if client_settings.credentials is not None else 'Use default'}"
-    )
-    try:
-        start_time = time.perf_counter()
-        await telegram.add_client(
-            session.file.read(),
-            credentials=client_settings.credentials,
-            proxy=client_settings.proxy,
+    with tracer.start_as_current_span("api.add_client") as span:
+        request_logger = logger.bind(session_filename=session.filename or "none")
+        span.set_attribute("session.filename", session.filename or "none")
+        span.set_attribute(
+            "credentials.provided",
+            client_settings.credentials is not None,
         )
-        duration = (time.perf_counter() - start_time) * 1000
-        logger.info(
-            f"✅ Add client request with session: {session.filename} completed. "
-            + f"Duration: {duration:.0f}ms"
-        )
-    except (InvalidClient, ClientBanned) as e:
-        raise CustomHTTPException.from_exception(e, status.HTTP_400_BAD_REQUEST) from e
+        span.set_attribute("proxy.provided", client_settings.proxy is not None)
+        request_logger.info("received_add_client_request", stage="start")
+        try:
+            await telegram.add_client(
+                session.file.read(),
+                credentials=client_settings.credentials,
+                proxy=client_settings.proxy,
+            )
+            request_logger.info("client_added", stage="success")
+        except (InvalidClient, ClientBanned) as e:
+            request_logger.error("client_add_error", stage="error", exc_info=True)
+            span.set_status(status=Status(StatusCode.ERROR, str(e)))
+            span.record_exception(e)
+            raise CustomHTTPException.from_exception(
+                e, status.HTTP_400_BAD_REQUEST
+            ) from e
 
-    return MessageResponse(message="Client added successfully")
+        return MessageResponse(message="Client added successfully")

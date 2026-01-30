@@ -1,10 +1,11 @@
-import time
-from logging import getLogger
-from typing import Literal
+from typing import Final, Literal
 from uuid import UUID
 
+import structlog
 from dishka.integrations.fastapi import DishkaRoute, FromDishka
 from fastapi import APIRouter, status
+from opentelemetry import trace
+from opentelemetry.trace import Status, StatusCode
 from parser.api.utils import CustomHTTPException, ErrorResponse
 from parser.dto import (
     Channel,
@@ -27,7 +28,8 @@ router = APIRouter(
     route_class=DishkaRoute,
 )
 
-logger = getLogger(__name__)
+logger: Final[structlog.BoundLogger] = structlog.get_logger("api.public")
+tracer: Final[trace.Tracer] = trace.get_tracer("api.public")
 
 
 @router.get(
@@ -40,28 +42,28 @@ logger = getLogger(__name__)
 async def get_media(
     media_id: UUID, storage: FromDishka[IStorage], media_dao: FromDishka[MediaDAO]
 ) -> MediaWithURL:
-    logger.info(f"⌛ Received get media request for media id: {media_id}")
+    with tracer.start_as_current_span("api.get_media") as span:
+        request_logger = logger.bind(media_id=media_id)
+        span.set_attribute("media.id", str(media_id))
+        request_logger.info("received_get_media_request", stage="start")
+        span.add_event("getting_media_from_database")
+        media = await media_dao.find_by_id(media_id)
+        if media is None:
+            request_logger.info("media_not_found", stage="error")
+            span.set_status(status=Status(StatusCode.ERROR, "Media not found"))
+            raise CustomHTTPException(
+                error="MediaNotFound",
+                status_code=status.HTTP_404_NOT_FOUND,
+                message=f"Media with id {media_id} not found",
+            )
+        span.add_event("media_found")
+        span.add_event("generating_presigned_url")
+        url = await storage.generate_presigned_url(media.file_name)
 
-    start_time = time.perf_counter()
-
-    media = await media_dao.find_by_id(media_id)
-    if media is None:
-        raise CustomHTTPException(
-            error="MediaNotFound",
-            status_code=status.HTTP_404_NOT_FOUND,
-            message=f"Media with id {media_id} not found",
-        )
-
-    url = await storage.generate_presigned_url(media.file_name)
-
-    result = MediaWithURL.from_media(Media.from_persistence(media), url)
-
-    duration = (time.perf_counter() - start_time) * 1000
-    logger.info(
-        f"✅ Get media request for media id: {media_id} completed. "
-        + f"Duration: {duration:.0f}ms"
-    )
-    return result
+        result = MediaWithURL.from_media(Media.from_persistence(media), url)
+        request_logger.info("get_media_request_completed", stage="end")
+        span.add_event("get_media_request_completed")
+        return result
 
 
 @router.get(
@@ -79,48 +81,52 @@ async def get_channel(
     channel_dao: FromDishka[ChannelDAO],
     channel_statistics_dao: FromDishka[ChannelStatisticDAO],
 ) -> Channel:
-    logger.info(f"⌛ Received get channel request for channel with id: {channel_id}")
+    with tracer.start_as_current_span("api.get_channel") as span:
+        request_logger = logger.bind(channel_id=channel_id)
+        span.set_attribute("channel.id", str(channel_id))
+        request_logger.info("received_get_channel_request", stage="start")
 
-    start_time = time.perf_counter()
+        span.add_event("getting_channel_from_database")
+        channel = await channel_dao.find_by_id_with_loaded_logo(channel_id)
+        if channel is None:
+            request_logger.error("channel_not_found", stage="error")
+            span.set_status(status=Status(StatusCode.ERROR, "Channel not found"))
+            raise CustomHTTPException(
+                error="ChannelNotFound",
+                status_code=status.HTTP_404_NOT_FOUND,
+                message=f"Channel with id {channel_id} not found",
+            )
 
-    channel = await channel_dao.find_by_id_with_loaded_logo(channel_id)
-    if channel is None:
-        raise CustomHTTPException(
-            error="ChannelNotFound",
-            status_code=status.HTTP_404_NOT_FOUND,
-            message=f"Channel with id {channel_id} not found",
+        span.add_event("getting_latest_statistic_from_database")
+        newest_statistic = await channel_statistics_dao.get_latest_by_channel_id(
+            channel_id
         )
 
-    newest_statistic = await channel_statistics_dao.get_latest_by_channel_id(channel_id)
+        if newest_statistic is None:
+            request_logger.error("latest_channel_statistic_not_found", stage="error")
+            span.set_status(
+                status=Status(StatusCode.ERROR, "Latest channel statistic not found")
+            )
+            raise CustomHTTPException(
+                error="LatestChannelStatisticNotFound",
+                status_code=status.HTTP_404_NOT_FOUND,
+                message=f"Latest statistic for channel with id {channel_id} not found",
+            )
 
-    if newest_statistic is None:
-        raise CustomHTTPException(
-            error="LatestChannelStatisticNotFound",
-            status_code=status.HTTP_404_NOT_FOUND,
-            message=f"Latest statistic for channel with id {channel_id} not found",
-        )
+        result = Channel.from_persistence(channel, newest_statistic)
 
-    result = Channel.from_persistence(channel, newest_statistic)
-
-    duration = (time.perf_counter() - start_time) * 1000
-    logger.info(
-        f"✅ Get channel request for channel with id: {channel_id} completed. "
-        + f"Duration: {duration:.0f}ms"
-    )
-    return result
+        request_logger.info("get_channel_request_completed", stage="end")
+        span.add_event("get_channel_request_completed")
+        return result
 
 
 @router.get("/channel/ids", status_code=status.HTTP_200_OK)
 async def get_channel_ids(channel_dao: FromDishka[ChannelDAO]) -> list[int]:
-    logger.info("⌛ Received get channel ids request")
-
-    start_time = time.perf_counter()
-
-    result = await channel_dao.get_ids()
-
-    duration = (time.perf_counter() - start_time) * 1000
-    logger.info(f"✅ Get channel ids request completed. Duration: {duration:.0f}ms")
-    return result
+    with tracer.start_as_current_span("api.get_channel_ids") as span:
+        span.add_event("getting_channel_ids_from_database")
+        result = await channel_dao.get_ids()
+        span.add_event("get_channel_ids_request_completed")
+        return result
 
 
 @router.get("/channel/statistics", status_code=status.HTTP_200_OK)
@@ -131,25 +137,32 @@ async def get_channel_statistics(
     skip: int = 0,
     limit: int | None = None,
 ) -> list[ChannelStatistic]:
-    logger.info(
-        f"⌛ Received get channel statistics request. sorting={sorting}, "
-        + f"channel_id={channel_id}, skip={skip}, limit={limit}"
-    )
+    with tracer.start_as_current_span("api.get_channel_statistics") as span:
+        span.set_attribute("channel.id", str(channel_id))
+        span.set_attribute("sorting", sorting)
+        span.set_attribute("skip", skip)
+        span.set_attribute("limit", limit or "none")
+        span.add_event("getting_channel_statistics_from_database")
 
-    start_time = time.perf_counter()
+        statistics = await channel_statistics_dao.get_channel_statistics(
+            channel_id, sorting, skip, limit
+        )
 
-    statistics = await channel_statistics_dao.get_channel_statistics(
-        channel_id, sorting, skip, limit
-    )
+        result = [
+            ChannelStatistic.from_persistence(statistic) for statistic in statistics
+        ]
 
-    result = [ChannelStatistic.from_persistence(statistic) for statistic in statistics]
-
-    duration = (time.perf_counter() - start_time) * 1000
-    logger.info(
-        "✅ Get channel statistics request "
-        + f"for channel with id: {channel_id} completed. Duration: {duration:.0f}ms"
-    )
-    return result
+        span.add_event("get_channel_statistics_request_completed")
+        span.set_attribute("count", len(result))
+        logger.info(
+            "got_channel_statistics",
+            count=len(result),
+            channel_id=channel_id,
+            sorting=sorting,
+            skip=skip,
+            limit=limit or "none",
+        )
+        return result
 
 
 @router.get("/channel/messages", status_code=status.HTTP_200_OK)
@@ -160,25 +173,33 @@ async def get_channel_messages(
     skip: int = 0,
     limit: int | None = None,
 ) -> list[ChannelMessage]:
-    logger.info(
-        f"⌛ Received get channel messages request. sorting={sorting}, "
-        + f"channel_id={channel_id}, skip={skip}, limit={limit}"
-    )
+    with tracer.start_as_current_span("api.get_channel_messages") as span:
+        span.set_attribute("channel.id", str(channel_id))
+        span.set_attribute("sorting", sorting)
+        span.set_attribute("skip", skip)
+        span.set_attribute("limit", limit or "none")
+        logger.info(
+            f"⌛ Received get channel messages request. sorting={sorting}, "
+            + f"channel_id={channel_id}, skip={skip}, limit={limit}"
+        )
 
-    start_time = time.perf_counter()
+        messages = await channel_message_dao.get_channel_messages(
+            channel_id, sorting, skip, limit
+        )
 
-    messages = await channel_message_dao.get_channel_messages(
-        channel_id, sorting, skip, limit
-    )
+        result = [ChannelMessage.from_persistence(message) for message in messages]
 
-    result = [ChannelMessage.from_persistence(message) for message in messages]
-
-    duration = (time.perf_counter() - start_time) * 1000
-    logger.info(
-        "✅ Get channel messages request "
-        + f"for channel with id: {channel_id} completed. Duration: {duration:.0f}ms"
-    )
-    return result
+        span.add_event("get_channel_messages_request_completed")
+        span.set_attribute("count", len(result))
+        logger.info(
+            "got_channel_messages",
+            count=len(result),
+            channel_id=channel_id,
+            sorting=sorting,
+            skip=skip,
+            limit=limit or "none",
+        )
+        return result
 
 
 @router.get(
@@ -195,23 +216,22 @@ async def get_message(
     message_id: int,
     channel_message_dao: FromDishka[ChannelMessageDAO],
 ) -> ChannelMessage:
-    logger.info(f"⌛ Received get message request for message with id: {message_id}")
+    with tracer.start_as_current_span("api.get_message") as span:
+        span.set_attribute("message.id", str(message_id))
+        request_logger = logger.bind(message_id=message_id)
 
-    start_time = time.perf_counter()
+        message = await channel_message_dao.find_by_id(message_id)
+        if message is None:
+            request_logger.info("message_not_found", stage="error")
+            span.set_status(status=Status(StatusCode.ERROR, "Message not found"))
+            raise CustomHTTPException(
+                error="ChannelMessageNotFound",
+                status_code=status.HTTP_404_NOT_FOUND,
+                message=f"Message with id {message_id} not found",
+            )
 
-    message = await channel_message_dao.find_by_id(message_id)
-    if message is None:
-        raise CustomHTTPException(
-            error="ChannelMessageNotFound",
-            status_code=status.HTTP_404_NOT_FOUND,
-            message=f"Message with id {message_id} not found",
-        )
+        result = ChannelMessage.from_persistence(message)
 
-    result = ChannelMessage.from_persistence(message)
-
-    duration = (time.perf_counter() - start_time) * 1000
-    logger.info(
-        f"✅ Get message request for message with id: {message_id} completed. "
-        + f"Duration: {duration:.0f}ms"
-    )
-    return result
+        request_logger.info("get_message_request_completed", stage="end")
+        span.add_event("get_message_request_completed")
+        return result

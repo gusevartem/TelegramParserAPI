@@ -1,3 +1,3 @@
-from parser.scheduler_loop import core
+from .core import run
 
-__all__ = ["core"]
+__all__ = ["run"]
