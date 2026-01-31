@@ -838,26 +838,6 @@ packaging = ">=18.0"
 wrapt = ">=1.0.0,<2.0.0"
 
 [[package]]
-name = "opentelemetry-instrumentation-aio-pika"
-version = "0.60b1"
-description = "OpenTelemetry Aio-pika instrumentation"
-optional = false
-python-versions = ">=3.9"
-groups = ["main"]
-files = [
-    {file = "opentelemetry_instrumentation_aio_pika-0.60b1-py3-none-any.whl", hash = "sha256:a27af7c054f5ba7f49ac1cff1cdec54061096c7387c20f0123bd2a81b1478016"},
-    {file = "opentelemetry_instrumentation_aio_pika-0.60b1.tar.gz", hash = "sha256:718cbc066be3ba579fc28ee4e1458bfe8681782e98c3bf7b04145f8165f22f3b"},
-]
-
-[package.dependencies]
-opentelemetry-api = ">=1.5,<2.0"
-opentelemetry-instrumentation = "0.60b1"
-wrapt = ">=1.0.0,<2.0.0"
-
-[package.extras]
-instruments = ["aio-pika (>=7.2.0,<10.0.0)"]
-
-[[package]]
 name = "opentelemetry-instrumentation-sqlalchemy"
 version = "0.60b1"
 description = "OpenTelemetry SQLAlchemy instrumentation"
@@ -1451,4 +1431,4 @@ type = ["pytest-mypy"]
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.12"
-content-hash = "5bd8a7aa0b35099af1f803b29355f782768430867025e11dc81a560dadfffd84"
+content-hash = "e71a3dfdb61a5e8ef0d2db2395bb877003ca07dafe6093080a43244aa2ecc776"

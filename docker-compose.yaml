@@ -1,0 +1,216 @@
+x-depends_on: &additional_services_healthy
+  mysql:
+    condition: service_healthy
+  rabbitmq:
+    condition: service_healthy
+  minio:
+    condition: service_healthy
+
+services:
+  # Additional
+  mysql:
+    image: mysql:8.4.8
+    restart: always
+    environment:
+      - MYSQL_USER=${MYSQL_USER}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
+      - MYSQL_DATABASE=${MYSQL_DATABASE}
+    ports:
+      - "${MYSQL_PORT}:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "mysqladmin ping -h 127.0.0.1 -u root -p$$MYSQL_ROOT_PASSWORD",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  adminer:
+    image: adminer:5.4.1
+    environment:
+      - ADMINER_DEFAULT_SERVER=mysql
+      - ADMINER_DEFAULT_SYSTEM=mysql
+    ports:
+      - "127.0.0.1:3306:8080"
+
+  rabbitmq:
+    image: heidiks/rabbitmq-delayed-message-exchange:4.2.0-management
+    restart: always
+    ports:
+      - "127.0.0.1:15672:15672"
+    environment:
+      - RABBITMQ_DEFAULT_USER=${RABBITMQ_LOGIN}
+      - RABBITMQ_DEFAULT_PASS=${RABBITMQ_PASSWORD}
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  minio:
+    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
+    restart: always
+    command: server /data --console-address ":9001"
+    ports:
+      - "127.0.0.1:9000:9000" # API S3
+      - "127.0.0.1:9001:9001" # Веб-консоль
+    environment:
+      - MINIO_ROOT_USER=${S3_ACCESS_KEY}
+      - MINIO_ROOT_PASSWORD=${S3_SECRET_KEY}
+      - MINIO_SERVER_URL=${MINIO_SERVER_URL}
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+
+  jaeger:
+    image: cr.jaegertracing.io/jaegertracing/jaeger:2.14.1
+    restart: always
+    ports:
+      - "127.0.0.1:16686:16686"
+
+  # Services
+
+  migrator:
+    build:
+      context: projects/migrator
+      dockerfile: Dockerfile
+    environment:
+      - DEBUG=false
+
+      - MYSQL_USER=${MYSQL_USER}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+      - MYSQL_DATABASE=${MYSQL_DATABASE}
+      - MYSQL_HOST=mysql
+      - MYSQL_PORT=3306
+
+      - TRACE_EXPORTER_ENDPOINT=http://jaeger:4318/v1/traces
+    depends_on:
+      <<: *additional_services_healthy
+
+  api:
+    build:
+      context: projects/api
+      dockerfile: Dockerfile
+    restart: always
+    ports:
+      - "127.0.0.1:5000:8080"
+    environment:
+      - DEBUG=false
+      - SECRET_KEY=${SECRET_KEY}
+
+      - MYSQL_USER=${MYSQL_USER}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+      - MYSQL_DATABASE=${MYSQL_DATABASE}
+      - MYSQL_HOST=mysql
+      - MYSQL_PORT=3306
+
+      - S3_ACCESS_KEY=${S3_ACCESS_KEY}
+      - S3_SECRET_KEY=${S3_SECRET_KEY}
+      - S3_BUCKET_NAME=${S3_BUCKET_NAME}
+      - S3_REGION_NAME=us-east-1
+      - S3_ENDPOINT_URL=http://minio:9000
+
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_PORT=5672
+      - RABBITMQ_LOGIN=${RABBITMQ_LOGIN}
+      - RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD}
+
+      - SAVE_TELEGRAM_RESPONSES=${SAVE_TELEGRAM_RESPONSES}
+
+      - DEFAULT_API_ID=${DEFAULT_API_ID}
+      - DEFAULT_API_HASH=${DEFAULT_API_HASH}
+      - DEFAULT_DEVICE_MODEL=${DEFAULT_DEVICE_MODEL}
+      - DEFAULT_SYSTEM_VERSION=${DEFAULT_SYSTEM_VERSION}
+      - DEFAULT_APP_VERSION=${DEFAULT_APP_VERSION}
+      - DEFAULT_LANG_CODE=${DEFAULT_LANG_CODE}
+      - DEFAULT_SYSTEM_LANG_CODE=${DEFAULT_SYSTEM_LANG_CODE}
+
+      - TRACE_EXPORTER_ENDPOINT=http://jaeger:4318/v1/traces
+    depends_on:
+      <<: *additional_services_healthy
+      migrator:
+        condition: service_started
+  
+  scheduler:
+    build:
+      context: projects/scheduler
+      dockerfile: Dockerfile
+    restart: always
+    environment:
+      - DEBUG=false
+
+      - MYSQL_USER=${MYSQL_USER}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+      - MYSQL_DATABASE=${MYSQL_DATABASE}
+      - MYSQL_HOST=mysql
+      - MYSQL_PORT=3306
+
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_PORT=5672
+      - RABBITMQ_LOGIN=${RABBITMQ_LOGIN}
+      - RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD}
+
+      - TRACE_EXPORTER_ENDPOINT=http://jaeger:4318/v1/traces
+    depends_on:
+      <<: *additional_services_healthy
+      migrator:
+        condition: service_started
+  
+  worker:
+    build:
+      context: projects/worker
+      dockerfile: Dockerfile
+    restart: always
+    environment:
+      - DEBUG=false
+
+      - MYSQL_USER=${MYSQL_USER}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+      - MYSQL_DATABASE=${MYSQL_DATABASE}
+      - MYSQL_HOST=mysql
+      - MYSQL_PORT=3306
+
+      - S3_ACCESS_KEY=${S3_ACCESS_KEY}
+      - S3_SECRET_KEY=${S3_SECRET_KEY}
+      - S3_BUCKET_NAME=${S3_BUCKET_NAME}
+      - S3_REGION_NAME=us-east-1
+      - S3_ENDPOINT_URL=http://minio:9000
+
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_PORT=5672
+      - RABBITMQ_LOGIN=${RABBITMQ_LOGIN}
+      - RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD}
+
+      - SAVE_TELEGRAM_RESPONSES=${SAVE_TELEGRAM_RESPONSES}
+
+      - DEFAULT_API_ID=${DEFAULT_API_ID}
+      - DEFAULT_API_HASH=${DEFAULT_API_HASH}
+      - DEFAULT_DEVICE_MODEL=${DEFAULT_DEVICE_MODEL}
+      - DEFAULT_SYSTEM_VERSION=${DEFAULT_SYSTEM_VERSION}
+      - DEFAULT_APP_VERSION=${DEFAULT_APP_VERSION}
+      - DEFAULT_LANG_CODE=${DEFAULT_LANG_CODE}
+      - DEFAULT_SYSTEM_LANG_CODE=${DEFAULT_SYSTEM_LANG_CODE}
+
+      - TRACE_EXPORTER_ENDPOINT=http://jaeger:4318/v1/traces
+    depends_on:
+      <<: *additional_services_healthy
+      migrator:
+        condition: service_started
+
+volumes:
+  mysql-data:
+  rabbitmq-data:
+  minio-data:

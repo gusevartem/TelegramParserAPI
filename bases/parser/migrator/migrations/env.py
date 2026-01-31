@@ -1,12 +1,14 @@
 import asyncio
+from importlib.metadata import version
 from logging.config import fileConfig
 
 from alembic import context
 from dishka import make_async_container, make_container
+from parser.logging import setup_logging
 from parser.persistence import PersistenceProvider
 from parser.persistence.core import DatabaseUrl
 from parser.persistence.models._base import BaseModel
-from parser.settings import ProjectSettingsProvider
+from parser.settings import ProjectSettings, ProjectSettingsProvider
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import AsyncEngine
 
@@ -44,6 +46,7 @@ def run_migrations_offline() -> None:
 
     """
     container = make_container(PersistenceProvider(), ProjectSettingsProvider())
+    setup_logging(container.get(ProjectSettings), "migrator", version("migrator"))
 
     url = container.get(DatabaseUrl)
     context.configure(
@@ -70,6 +73,7 @@ async def run_async_migrations() -> None:
 
     """
     container = make_async_container(PersistenceProvider(), ProjectSettingsProvider())
+    setup_logging(await container.get(ProjectSettings), "migrator", version("migrator"))
     connectable = await container.get(AsyncEngine)
 
     async with connectable.connect() as connection:
