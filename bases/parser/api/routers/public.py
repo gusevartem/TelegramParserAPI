@@ -178,10 +178,6 @@ async def get_channel_messages(
         span.set_attribute("sorting", sorting)
         span.set_attribute("skip", skip)
         span.set_attribute("limit", limit or "none")
-        logger.info(
-            f"⌛ Received get channel messages request. sorting={sorting}, "
-            + f"channel_id={channel_id}, skip={skip}, limit={limit}"
-        )
 
         messages = await channel_message_dao.get_channel_messages(
             channel_id, sorting, skip, limit
@@ -189,7 +185,16 @@ async def get_channel_messages(
 
         result = [ChannelMessage.from_persistence(message) for message in messages]
 
-        span.add_event("get_channel_messages_request_completed")
+        span.add_event(
+            "get_channel_messages_request_completed",
+            {
+                "count": len(result),
+                "channel_id": channel_id,
+                "sorting": sorting,
+                "skip": skip,
+                "limit": limit or "none",
+            },
+        )
         span.set_attribute("count", len(result))
         logger.info(
             "got_channel_messages",

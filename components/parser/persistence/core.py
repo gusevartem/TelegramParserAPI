@@ -118,7 +118,7 @@ class PersistenceProvider(Provider):
             isolation_level="READ COMMITTED",
         )
         SQLAlchemyInstrumentor().instrument(
-            engine=engine,
+            engine=engine.sync_engine,
             tracer_provider=trace.get_tracer_provider(),
             enable_commenter=True,
             commenter_options={"trace_id": True, "span_id": True},

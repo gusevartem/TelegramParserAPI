@@ -40,6 +40,9 @@ class Storage(IStorage):
     ) -> None:
         with self.tracer.start_as_current_span("storage.upload_media") as span:
             span.set_attribute("storage.system", "s3")
+            span.set_attribute(
+                "storage.max_file_size_bytes", self.settings.max_file_size_bytes
+            )
             span.set_attribute("storage.bucket", self.settings.s3_bucket_name)
             span.set_attribute("storage.operation", "upload")
             span.set_attribute("storage.file_name", file_name)
@@ -76,7 +79,7 @@ class Storage(IStorage):
                         stage="success",
                         attempt=attempt,
                     )
-                    span.add_event("upload_completed")
+                    span.add_event("upload_completed", {"attempt": attempt})
                     return
 
                 except ClientError as e:
@@ -98,7 +101,13 @@ class Storage(IStorage):
                         error_code=code,
                     )
                     span.add_event(
-                        "upload_retry", {"attempt": attempt, "wait_seconds": wait}
+                        "upload_retry",
+                        {
+                            "attempt": attempt,
+                            "wait_seconds": wait,
+                            "error_code": code,
+                            "max_attempts": max_retries,
+                        },
                     )
                     if attempt < max_retries:
                         await asyncio.sleep(wait)
@@ -114,7 +123,13 @@ class Storage(IStorage):
                         exc_info=True,
                     )
                     span.add_event(
-                        "upload_retry", {"attempt": attempt, "wait_seconds": wait}
+                        "upload_retry",
+                        {
+                            "attempt": attempt,
+                            "wait_seconds": wait,
+                            "error_type": type(e).__name__,
+                            "max_attempts": max_retries,
+                        },
                     )
                     if attempt < max_retries:
                         await asyncio.sleep(wait)
@@ -178,7 +193,7 @@ class Storage(IStorage):
                         stage="success",
                         attempt=attempt,
                     )
-                    span.add_event("presign_completed")
+                    span.add_event("presign_completed", {"attempt": attempt})
                     return url
 
                 except ClientError as e:
@@ -204,7 +219,13 @@ class Storage(IStorage):
                         error_code=code,
                     )
                     span.add_event(
-                        "presign_retry", {"attempt": attempt, "wait_seconds": wait}
+                        "presign_retry",
+                        {
+                            "attempt": attempt,
+                            "wait_seconds": wait,
+                            "error_code": code,
+                            "max_attempts": max_retries,
+                        },
                     )
                     if attempt < max_retries:
                         await asyncio.sleep(wait)
@@ -220,7 +241,13 @@ class Storage(IStorage):
                         exc_info=True,
                     )
                     span.add_event(
-                        "presign_retry", {"attempt": attempt, "wait_seconds": wait}
+                        "presign_retry",
+                        {
+                            "attempt": attempt,
+                            "wait_seconds": wait,
+                            "error_type": type(e).__name__,
+                            "max_attempts": max_retries,
+                        },
                     )
                     if attempt < max_retries:
                         await asyncio.sleep(wait)

@@ -3,10 +3,7 @@ import sys
 
 import structlog
 from opentelemetry import trace
-from opentelemetry.exporter.otlp.proto.http._log_exporter import OTLPLogExporter
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
-from opentelemetry.sdk._logs import LoggerProvider, LoggingHandler
-from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
@@ -46,46 +43,20 @@ def setup_logging(settings: ProjectSettings, service_name: str, service_version:
         trace_exporter = OTLPSpanExporter(endpoint=settings.trace_exporter_endpoint)
         tracer_provider.add_span_processor(BatchSpanProcessor(trace_exporter))
 
-    if settings.debug:
-        structlog.configure(
-            processors=[
-                structlog.processors.TimeStamper(key="ts", fmt="iso"),
-                structlog.processors.add_log_level,
-                structlog.processors.StackInfoRenderer(),
-                structlog.processors.dict_tracebacks,
-                _otel_trace_processor,
-                structlog.dev.ConsoleRenderer(colors=True),
-            ],
-            logger_factory=structlog.stdlib.LoggerFactory(),
-            cache_logger_on_first_use=True,
-        )
-    else:
-        structlog.configure(
-            processors=[
-                structlog.processors.TimeStamper(key="ts", fmt="iso"),
-                structlog.processors.add_log_level,
-                structlog.processors.StackInfoRenderer(),
-                structlog.processors.dict_tracebacks,
-                _otel_trace_processor,
-                structlog.processors.JSONRenderer(),
-            ],
-            logger_factory=structlog.stdlib.LoggerFactory(),
-            cache_logger_on_first_use=True,
-        )
-
-        if settings.log_exporter_endpoint:
-            logger_provider = LoggerProvider(resource=resource)
-            exporter = OTLPLogExporter(endpoint=settings.log_exporter_endpoint)
-            logger_provider.add_log_record_processor(BatchLogRecordProcessor(exporter))
-
-            root = logging.getLogger()
-            root.setLevel(logging.NOTSET)
-
-            otel_handler = LoggingHandler(
-                level=logging.NOTSET, logger_provider=logger_provider
-            )
-            root.addHandler(otel_handler)
-
-            stdout_handler = logging.StreamHandler(sys.stdout)
-            stdout_handler.setFormatter(logging.Formatter("%(message)s"))
-            root.addHandler(stdout_handler)
+    structlog.configure(
+        processors=[
+            structlog.processors.TimeStamper(key="ts", fmt="iso"),
+            structlog.processors.add_log_level,
+            structlog.processors.StackInfoRenderer(),
+            structlog.processors.dict_tracebacks,
+            _otel_trace_processor,
+            structlog.dev.ConsoleRenderer(colors=True),
+        ],
+        logger_factory=structlog.stdlib.LoggerFactory(),
+        cache_logger_on_first_use=True,
+    )
+    root = logging.getLogger()
+    root.setLevel(logging.INFO)
+    stdout_handler = logging.StreamHandler(sys.stdout)
+    stdout_handler.setFormatter(logging.Formatter("%(message)s"))
+    root.addHandler(stdout_handler)

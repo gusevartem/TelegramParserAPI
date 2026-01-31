@@ -77,8 +77,9 @@ class MessageBroker(IMessageBroker):
                 task_url=task.url,
                 queue=self.settings.parsing_tasks_queue_name,
             )
-
+            span.add_event("configuring_message_broker")
             await self.setup(self._channel, self.settings, task_logger)
+            span.add_event("message_broker_configured")
 
             task_logger.info("publishing_task", stage="start")
             span.add_event("publish_started")
@@ -130,7 +131,7 @@ class MessageBroker(IMessageBroker):
                     )
                 except (asyncio.TimeoutError, StopAsyncIteration) as e:
                     logger.info("task_consume_timeout", timeout=timeout)
-                    span.add_event("consume_timeout")
+                    span.add_event("consume_timeout", {"timeout": timeout})
                     raise TimeoutError("Cannot get task from queue") from e
 
             async with message.process(ignore_processed=True, requeue=True):
