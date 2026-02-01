@@ -43,17 +43,19 @@ async def get_task(
         result = await parsing_task_dao.find_by_id(task_id)
 
         if result is None:
-            request_logger.info("task_not_found", stage="error")
+            request_logger.error("task_not_found", stage="error")
             span.set_status(status=Status(StatusCode.ERROR, "Task not found"))
             raise CustomHTTPException(
                 error="TaskNotFound",
                 status_code=status.HTTP_404_NOT_FOUND,
                 message=f"Task with id {task_id} not found",
             )
-        request_logger.info("task_found", stage="success", id=result.id, url=result.url)
+        request_logger.info(
+            "task_found", stage="complete", id=result.id, url=result.url
+        )
         span.set_attribute("task.id", str(result.id))
         span.set_attribute("task.url", result.url)
-        span.add_event("task_found")
+
         next_run = calculate_next_run(
             bucket=result.bucket,
             last_parsed_at=result.last_parsed_at,
@@ -62,6 +64,9 @@ async def get_task(
         )
         if next_run:
             span.set_attribute("task.next_run", str(next_run))
+        request_logger.info(
+            "calculated_next_run", next_run=str(next_run) if next_run else "none"
+        )
         return ParsingTask.from_persistence(
             result, int(next_run.timestamp()) if next_run is not None else None
         )
@@ -80,11 +85,10 @@ async def add_channel(
         result = await add_task(channel_url)
 
         request_logger.info(
-            "channel_added", stage="success", id=result.id, url=result.url
+            "channel_added", stage="complete", id=result.id, url=result.url
         )
         span.set_attribute("task.id", str(result.id))
         span.set_attribute("task.url", result.url)
-        span.add_event("channel_added")
 
         return result
 
@@ -136,7 +140,7 @@ async def add_client(
                 credentials=client_settings.credentials,
                 proxy=client_settings.proxy,
             )
-            request_logger.info("client_added", stage="success")
+            request_logger.info("client_added", stage="complete")
         except (InvalidClient, ClientBanned) as e:
             request_logger.error("client_add_error", stage="error", exc_info=True)
             span.set_status(status=Status(StatusCode.ERROR, str(e)))

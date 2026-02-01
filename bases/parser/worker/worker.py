@@ -67,11 +67,10 @@ class Worker:
             async with self._telegram.get_client() as client:
                 while True:
                     with self.tracer.start_as_current_span("worker.wait_task") as span:
-                        wait_timeout = 5
+                        wait_timeout = 600
                         span.set_attribute("wait_timeout", wait_timeout)
                         logger = self.logger.bind(wait_timeout=wait_timeout)
                         logger.info("waiting_for_task")
-                        span.add_event("waiting_for_task")
                         try:
                             async with self._message_broker.get_task(
                                 wait_timeout
@@ -82,15 +81,15 @@ class Worker:
                                     task_span.set_attribute("task.id", str(task.id))
                                     task_span.set_attribute("task.url", task.url)
                                     task_span.set_attribute(
-                                        "task.channel_id", task.channel_id or "null"
+                                        "task.channel_id", task.channel_id or "none"
                                     )
                                     task_span.set_attribute(
                                         "task.next_run_at",
-                                        task.next_run_at or "null",
+                                        task.next_run_at or "none",
                                     )
                                     task_span.set_attribute(
                                         "task.last_parsed_at",
-                                        task.last_parsed_at or "null",
+                                        task.last_parsed_at or "none",
                                     )
                                     task_span.set_attribute(
                                         "task.created_at",
@@ -99,13 +98,13 @@ class Worker:
                                     task_logger = logger.bind(
                                         task_id=str(task.id),
                                         task_url=task.url,
-                                        channel_id=task.channel_id or "null",
-                                        next_run_at=task.next_run_at or "null",
-                                        last_parsed_at=task.last_parsed_at or "null",
+                                        channel_id=task.channel_id or "none",
+                                        next_run_at=task.next_run_at or "none",
+                                        last_parsed_at=task.last_parsed_at or "none",
                                         created_at=task.created_at,
                                     )
+                                    task_logger.info("processing_task", stage="start")
                                     task_logger.info("finding_task")
-                                    task_span.add_event("finding_task")
                                     async with self._dao_factory() as dao_factory:
                                         parsing_task_dao = dao_factory(ParsingTaskDAO)
                                         persistence_task = (
@@ -178,10 +177,7 @@ class Worker:
                                             )
                                             await parsing_task_dao.commit()
 
-                                    task_span.add_event("task_found")
-
-                                    task_logger.info("processing_task")
-                                    task_span.add_event("processing_task")
+                                    task_logger.info("task_found_in_database")
 
                                     async with self._handle_task_processing_errors(
                                         task, task_logger, task_span
@@ -190,12 +186,10 @@ class Worker:
                                             client, task, task_logger, task_span
                                         )
 
-                                    task_logger.info("task_processed")
-                                    task_span.add_event("task_processed")
+                                    task_logger.info("task_processed", stage="complete")
 
                                     async with self._dao_factory() as dao_factory:
                                         task_logger.info("updating_task_status")
-                                        task_span.add_event("updating_task_status")
 
                                         parsing_task_dao = dao_factory(ParsingTaskDAO)
                                         persistence_task = (
@@ -218,16 +212,15 @@ class Worker:
                                             await parsing_task_dao.commit()
 
                                         task_logger.info("task_updated")
-                                        task_span.add_event("task_updated")
 
                         except InvalidMessageError:
-                            logger.info("invalid_message", action="ignore")
+                            logger.error("invalid_message", action="ignore")
                             continue
                         except InvalidTask:
-                            logger.info("invalid_task", action="ignore")
+                            logger.error("invalid_task", action="ignore")
                             continue
                         except TimeoutError:
-                            logger.info(
+                            logger.error(
                                 "timeout_error",
                                 action="sleep",
                                 sleep_seconds=tasks_timeout_sleep,
@@ -237,7 +230,7 @@ class Worker:
                         except TelegramException:
                             raise
                         except Exception as e:
-                            logger.error("unknown_error", exc_info=True)
+                            logger.critical("unknown_error", exc_info=True)
                             span.set_status(Status(StatusCode.ERROR, str(e)))
                             span.record_exception(e)
                             continue
@@ -295,7 +288,7 @@ class Worker:
         except TemporaryCannotProcessTask as e:
             await change_task_status(ParsingTaskStatus.IDLE, e)
             task_logger.warning(
-                "cannot_process_task", action="mark_as_idle", exc_info=True
+                "temporary_cannot_process_task", action="mark_as_idle", exc_info=True
             )
 
     async def _process_task(
@@ -306,9 +299,7 @@ class Worker:
         task_span: Span,
     ) -> None:
         task_logger.info("getting_channel")
-        task_span.add_event("getting_channel")
         channel_entity = await self._get_channel(client, task.url)
-        task_span.add_event("got_channel")
         task_logger.info("got_channel")
         task_logger = task_logger.bind(channel_id=channel_entity.id)
         task_span.set_attribute("channel_id", channel_entity.id)
@@ -360,7 +351,6 @@ class Worker:
 
         async with self._dao_factory() as dao_factory:
             task_logger.info("saving_channel_to_database")
-            task_span.add_event("saving_channel_to_database")
             channel_dao = dao_factory(ChannelDAO)
             media_dao = dao_factory(MediaDAO)
             channel_statistic_dao = dao_factory(ChannelStatisticDAO)
@@ -371,7 +361,6 @@ class Worker:
                     "channel_does_not_exist_in_database", action="create_new"
                 )
                 task_logger.info("downloading_channel_logo")
-                task_span.add_event("downloading_channel_logo")
                 logo = await client.download_profile_photo(channel_entity, file=bytes)  # pyright: ignore[reportArgumentType]
                 logo_media: Media | None = None
                 if logo is None or not isinstance(logo, bytes):
@@ -399,7 +388,6 @@ class Worker:
                         file_name=file_name,
                     )
                     await self._storage.save_media(logo, file_name)
-                task_span.add_event("channel_logo_downloaded")
                 persistence_channel = await channel_dao.create(
                     id=channel_entity.id,
                     name=channel_entity.title,
@@ -407,10 +395,8 @@ class Worker:
                     logo=logo_media,
                 )
                 task_logger.info("channel_saved_to_database")
-                task_span.add_event("channel_saved_to_database")
 
             task_logger.info("saving_channel_statistic_to_database")
-            task_span.add_event("saving_channel_statistic_to_database")
 
             now_utc = datetime.now(timezone.utc)
             time_limit_24h = now_utc - timedelta(hours=72)
@@ -429,11 +415,9 @@ class Worker:
             )
 
             task_logger.info("channel_statistic_saved_to_database")
-            task_span.add_event("channel_statistic_saved_to_database")
 
             await dao_factory.commit()
         task_logger.info("channel_saved_to_database")
-        task_span.add_event("channel_saved_to_database")
 
         await self._process_messages(client, collected_messages, channel_entity.id)
 
@@ -442,7 +426,6 @@ class Worker:
             span.set_attribute("url", url)
             logger = self.logger.bind(url=url)
             logger.info("getting_channel_entity", status="start")
-            span.add_event("get_channel_entity_started")
             span.set_attribute("channel.url", url)
 
             try:
@@ -494,7 +477,6 @@ class Worker:
                             )
 
                         logger.info("got_channel_entity")
-                        span.add_event("got_channel_entity")
                         return check_res.chat
 
                     elif isinstance(check_res, types.ChatInvite):
@@ -511,7 +493,6 @@ class Worker:
                             )
 
                         logger.info("joining_channel")
-                        span.add_event("joining_channel")
                         updates = await client(
                             functions.messages.ImportChatInviteRequest(hash_part)
                         )
@@ -553,7 +534,6 @@ class Worker:
                                 )
 
                             logger.info("got_channel_entity")
-                            span.add_event("got_channel_entity")
                             return entity
                         else:
                             logger.error("update_did_not_contain_any_chats")
@@ -602,7 +582,6 @@ class Worker:
 
             else:
                 logger.info("getting_channel_entity_by_username")
-                span.add_event("getting_channel_entity_by_username")
 
                 username = http_url.path.lstrip("/")
                 if "/" in username:
@@ -706,8 +685,7 @@ class Worker:
             logger = self.logger.bind(
                 channel_id=channel_id, count=len(collected_messages)
             )
-            logger.info("processing_messages")
-            span.add_event("processing_started")
+            logger.info("processing_messages", stage="start")
 
             async with self._dao_factory() as dao_factory:
                 channel_message_dao = dao_factory(ChannelMessageDAO)
@@ -798,5 +776,4 @@ class Worker:
                         )
 
                 await dao_factory.commit()
-            logger.info("processed_messages")
-            span.add_event("processing_completed")
+            logger.info("processed_messages", stage="complete")

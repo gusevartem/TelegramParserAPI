@@ -70,7 +70,6 @@ class Telegram(ITelegram):
             logger = self.logger.bind(proxy_provided=proxy is not None)
 
             logger.info("adding_client", stage="start")
-            span.add_event("add_client_started")
 
             with tempfile.NamedTemporaryFile(suffix=".session") as session_temp_file:
                 logger.info("creating_temporary_session_file")
@@ -140,8 +139,12 @@ class Telegram(ITelegram):
                             me.id, string_session.save()
                         )
 
-            logger.info("client_added_successfully", user_id=me.id, phone=me.phone)
-            span.add_event("add_client_completed")
+            logger.info(
+                "client_added_successfully",
+                user_id=me.id,
+                phone=me.phone,
+                stage="complete",
+            )
 
     @override
     @asynccontextmanager
@@ -219,7 +222,6 @@ class Telegram(ITelegram):
                         span.set_attribute(
                             "telegram.phone", client_info.phone or "none"
                         )
-                        span.add_event("client_acquired")
 
                         yield client
 
@@ -227,8 +229,8 @@ class Telegram(ITelegram):
                             "client_usage_completed",
                             user_id=session_container.user_id,
                             phone=client_info.phone,
+                            stage="complete",
                         )
-                        span.add_event("client_usage_completed")
 
                     session_container.session.set_dc(
                         client.current_session.dc_id,

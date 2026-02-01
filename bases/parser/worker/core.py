@@ -41,14 +41,12 @@ async def run_worker() -> None:
     try:
         worker = await container.get(Worker)
         while True:
-            with tracer.start_as_current_span("worker_iteration") as span:
+            with tracer.start_as_current_span("worker.iteration") as span:
                 try:
                     logger.info("worker_loop_started")
-                    span.add_event("worker_loop_started")
 
                     await worker.start()
 
-                    span.add_event("worker_loop_completed")
                     logger.info("worker_loop_completed")
 
                 except asyncio.CancelledError:

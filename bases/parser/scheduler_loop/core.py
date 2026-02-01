@@ -32,7 +32,7 @@ async def run_scheduler() -> None:
                 try:
                     task_limit = 1000
                     span.set_attribute("iteration.tasks_limit", task_limit)
-                    logger.info("running_iteration")
+                    logger.info("running_iteration", stage="start")
 
                     async with container() as request_container:
                         get_tasks = await request_container.get(GetTasks)
@@ -57,11 +57,9 @@ async def run_scheduler() -> None:
                                         "task.channel_id", task.channel_id
                                     )
                                 try:
-                                    task_logger.info("publishing_task")
-                                    task_span.add_event("task_publish_started")
+                                    task_logger.info("publishing_task", stage="start")
                                     await message_broker.publish_task(task)
-                                    task_span.add_event("task_publish_completed")
-                                    task_logger.info("task_published")
+                                    task_logger.info("task_published", stage="complete")
                                     published_count += 1
                                 except Exception as e:
                                     task_span.set_status(
@@ -72,7 +70,7 @@ async def run_scheduler() -> None:
                                         "task_publish_failed", exc_info=True
                                     )
 
-                    logger.info("iteration_completed")
+                    logger.info("iteration_completed", stage="complete")
                     span.set_attribute("iteration.published_tasks", published_count)
                 except asyncio.CancelledError:
                     logger.info("iteration_cancelled")

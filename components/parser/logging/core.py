@@ -16,12 +16,35 @@ def _otel_trace_processor(
     event_dict: structlog.typing.EventDict,
 ):
     span = trace.get_current_span()
-    ctx = span.get_span_context()
-    if ctx.is_valid:
-        event_dict["otel"] = {
-            "trace_id": f"{ctx.trace_id:032x}",
-            "span_id": f"{ctx.span_id:016x}",
-        }
+    if span.is_recording():
+        attributes: dict[str, str | int | float | bool] = {}
+        for k, v in event_dict.items():
+            if (
+                k != "event"
+                and k != "level"
+                and (
+                    isinstance(v, str)
+                    or isinstance(v, int)
+                    or isinstance(v, float)
+                    or isinstance(v, bool)
+                    or v is None
+                )
+            ):
+                attributes[k] = v or "none"
+        span.add_event(
+            name=event_dict.get("event", ""),
+            attributes={
+                "log.level": event_dict.get("level", "info"),
+                **attributes,
+            },
+        )
+
+        ctx = span.get_span_context()
+        if ctx.is_valid:
+            event_dict["otel"] = {
+                "trace_id": f"{ctx.trace_id:032x}",
+                "span_id": f"{ctx.span_id:016x}",
+            }
     return event_dict
 
 

@@ -77,12 +77,11 @@ class MessageBroker(IMessageBroker):
                 task_url=task.url,
                 queue=self.settings.parsing_tasks_queue_name,
             )
-            span.add_event("configuring_message_broker")
+            task_logger.info("configure_message_broker", stage="start")
             await self.setup(self._channel, self.settings, task_logger)
-            span.add_event("message_broker_configured")
+            task_logger.info("configure_message_broker", stage="complete")
 
             task_logger.info("publishing_task", stage="start")
-            span.add_event("publish_started")
             try:
                 await self._channel.default_exchange.publish(
                     aio_pika.Message(
@@ -92,8 +91,7 @@ class MessageBroker(IMessageBroker):
                     ),
                     routing_key=self.settings.parsing_tasks_queue_name,
                 )
-                task_logger.info("task_published", stage="success")
-                span.add_event("publish_completed")
+                task_logger.info("task_published", stage="complete")
             except Exception as e:
                 span.set_status(Status(StatusCode.ERROR, str(e)))
                 span.record_exception(e)
@@ -103,82 +101,49 @@ class MessageBroker(IMessageBroker):
     @override
     @asynccontextmanager
     async def get_task(self, timeout: int = 5) -> AsyncIterator[ParsingTask]:
-        with self.tracer.start_as_current_span("message_broker.get_task") as span:
-            span.set_attribute("messaging.system", "rabbitmq")
-            span.set_attribute(
-                "messaging.destination", self.settings.parsing_tasks_queue_name
-            )
-            span.set_attribute("messaging.operation", "consume")
-            span.set_attribute("consume.timeout_seconds", timeout)
+        logger = self.logger.bind(
+            queue=self.settings.parsing_tasks_queue_name, timeout=timeout
+        )
 
-            logger = self.logger.bind(
-                queue=self.settings.parsing_tasks_queue_name, timeout=timeout
-            )
+        await self.setup(self._channel, self.settings, logger)
 
-            await self.setup(self._channel, self.settings, logger)
+        logger.info("waiting_for_task", stage="start")
 
-            logger.info("waiting_for_task", stage="start")
-            span.add_event("consume_started")
+        queue = await self._channel.get_queue(self.settings.parsing_tasks_queue_name)
 
-            queue = await self._channel.get_queue(
-                self.settings.parsing_tasks_queue_name
-            )
+        async with queue.iterator() as queue_iter:
+            try:
+                message = await asyncio.wait_for(
+                    queue_iter.__anext__(), timeout=timeout
+                )
+            except (asyncio.TimeoutError, StopAsyncIteration) as e:
+                logger.info("task_consume_timeout")
+                raise TimeoutError("Cannot get task from queue") from e
 
-            async with queue.iterator() as queue_iter:
-                try:
-                    message = await asyncio.wait_for(
-                        queue_iter.__anext__(), timeout=timeout
-                    )
-                except (asyncio.TimeoutError, StopAsyncIteration) as e:
-                    logger.info("task_consume_timeout", timeout=timeout)
-                    span.add_event("consume_timeout", {"timeout": timeout})
-                    raise TimeoutError("Cannot get task from queue") from e
+        async with message.process(ignore_processed=True, requeue=True):
+            try:
+                task = ParsingTask.model_validate_json(message.body.decode())
+            except ValidationError as e:
+                logger.error("invalid_message_received", exc_info=True)
+                await message.reject(requeue=False)
+                raise InvalidMessageError(
+                    f"Unexpected message in task queue: {str(e)}"
+                ) from e
 
-            async with message.process(ignore_processed=True, requeue=True):
-                try:
-                    task = ParsingTask.model_validate_json(message.body.decode())
-                except ValidationError as e:
-                    logger.error(
-                        "invalid_message_received", error=str(e), exc_info=True
-                    )
-                    span.set_status(Status(StatusCode.ERROR, "Invalid message format"))
-                    span.record_exception(e)
-                    await message.reject(requeue=False)
-                    raise InvalidMessageError(
-                        f"Unexpected message in task queue: {str(e)}"
-                    ) from e
+            task_logger = logger.bind(task_id=str(task.id), task_url=task.url)
+            task_logger.info("task_received", stage="complete")
 
-                task_logger = logger.bind(task_id=str(task.id), task_url=task.url)
-                task_logger.info("task_received", stage="success")
-                span.set_attribute("task.id", str(task.id))
-                span.set_attribute("task.url", task.url)
-                span.add_event("task_received")
+            try:
+                yield task
+                task_logger.info("task_processed_successfully")
 
-                try:
-                    yield task
-
-                    task_logger.info("task_processed_successfully")
-                    span.add_event("task_processed_successfully")
-
-                except InvalidTask as e:
-                    task_logger.error("invalid_task", error=str(e), exc_info=True)
-                    span.set_status(Status(StatusCode.ERROR, str(e)))
-                    span.record_exception(e)
-
-                    await message.reject(requeue=False)
-                    raise
-                except Exception as e:
-                    task_logger.error(
-                        "task_processing_failed_requeueing", exc_info=True
-                    )
-                    span.set_status(
-                        Status(
-                            StatusCode.ERROR,
-                            "Unexpected error during task processing",
-                        )
-                    )
-                    span.record_exception(e)
-                    raise
+            except InvalidTask:
+                task_logger.error("invalid_task", exc_info=True)
+                await message.reject(requeue=False)
+                raise
+            except Exception:
+                task_logger.error("task_processing_failed_requeueing", exc_info=True)
+                raise
 
 
 class MessageBrokerProvider(Provider):

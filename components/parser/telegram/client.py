@@ -190,7 +190,6 @@ class TelegramClient(ITelegramClient):
     async def __aenter__(self) -> Self:
         with self.tracer.start_as_current_span("telegram.connect") as span:
             self.logger.info("connecting_telegram_client", stage="start")
-            span.add_event("connect_started")
 
             await self._telethon_client.connect()
 
@@ -201,8 +200,7 @@ class TelegramClient(ITelegramClient):
                     "Client is not authorized (session invalid or revoked)"
                 )
 
-            self.logger.info("telegram_client_connected", stage="success")
-            span.add_event("connect_completed")
+            self.logger.info("telegram_client_connected", stage="complete")
             return self
 
     @override
@@ -212,14 +210,12 @@ class TelegramClient(ITelegramClient):
         exc_val: BaseException | None,
         exc_tb: TracebackType | None,
     ) -> None:
-        with self.tracer.start_as_current_span("telegram.disconnect") as span:
+        with self.tracer.start_as_current_span("telegram.disconnect"):
             self.logger.info("disconnecting_telegram_client", stage="start")
-            span.add_event("disconnect_started")
 
             await self._telethon_client.disconnect()  # pyright: ignore
 
-            self.logger.info("telegram_client_disconnected", stage="success")
-            span.add_event("disconnect_completed")
+            self.logger.info("telegram_client_disconnected", stage="complete")
 
     @override
     @handle_telethon_errors
@@ -227,7 +223,6 @@ class TelegramClient(ITelegramClient):
         with self.tracer.start_as_current_span("telegram.raw_request") as span:
             span.set_attribute("telegram.request_type", type(request).__name__)
             self.logger.info("sending_raw_request", request_type=type(request).__name__)
-            span.add_event("request_sent")
 
             result = await self._telethon_client(request)
 
@@ -240,27 +235,28 @@ class TelegramClient(ITelegramClient):
                             response_dict, ensure_ascii=False, default=str
                         ),
                     )
-                except Exception as e:
+                except Exception:
                     self.logger.info(
-                        "telegram_raw_response_serialization_failed", error=str(e)
+                        "telegram_raw_response_serialization_failed", exc_info=True
                     )
 
             self.logger.info(
-                "raw_request_completed", response_type=type(result).__name__
+                "raw_request_completed",
+                response_type=type(result).__name__,
+                stage="complete",
             )
-            span.add_event("response_received")
             return result
 
     @override
     @handle_telethon_errors
     async def get_me(self) -> User:
-        with self.tracer.start_as_current_span("telegram.get_me") as span:
+        with self.tracer.start_as_current_span("telegram.get_me"):
             self.logger.info("getting_me", stage="start")
-            span.add_event("get_me_started")
 
             user = await self._telethon_client.get_me()
 
             if not isinstance(user, User):
+                self.logger.error("unexpected_user_type", user_type=type(user).__name__)
                 raise ValueError(
                     f"Unexpected user type. Got {type(user).__name__}, expected User"
                 )
@@ -273,18 +269,17 @@ class TelegramClient(ITelegramClient):
                             user.to_dict(), ensure_ascii=False, default=str
                         ),
                     )
-                except Exception as e:
-                    self.logger.info("response_serialization_failed", error=str(e))
+                except Exception:
+                    self.logger.info("response_serialization_failed", exc_info=True)
 
             self.logger.info(
                 "got_me",
                 stage="success",
                 user_id=user.id,
-                username=user.username,
-                user_first_name=user.first_name,
-                user_last_name=user.last_name,
+                username=user.username or "none",
+                user_first_name=user.first_name or "none",
+                user_last_name=user.last_name or "none",
             )
-            span.add_event("get_me_completed")
             return user
 
     @override
@@ -294,7 +289,6 @@ class TelegramClient(ITelegramClient):
             span.set_attribute("telegram.entity", str(entity))
 
             self.logger.info("getting_entity", entity=str(entity), stage="start")
-            span.add_event("get_entity_started")
 
             result = await self._telethon_client.get_entity(entity)
 
@@ -312,11 +306,10 @@ class TelegramClient(ITelegramClient):
                             response_dict, ensure_ascii=False, default=str
                         ),
                     )
-                except Exception as e:
-                    self.logger.info("response_serialization_failed", error=str(e))
+                except Exception:
+                    self.logger.info("response_serialization_failed", exc_info=True)
 
-            self.logger.info("got_entity", entity=str(entity), stage="success")
-            span.add_event("get_entity_completed")
+            self.logger.info("got_entity", entity=str(entity), stage="complete")
             return result
 
     @override
@@ -331,22 +324,18 @@ class TelegramClient(ITelegramClient):
     ) -> AsyncIterator[Message]:
         with self.tracer.start_as_current_span("telegram.iter_messages") as span:
             span.set_attribute("telegram.entity", str(entity))
-            if limit is not None:
-                span.set_attribute("telegram.messages_limit", limit)
-            if offset_date is not None:
-                span.set_attribute("telegram.offset_date", str(offset_date))
-            if search is not None:
-                span.set_attribute("telegram.search_query", search)
+            span.set_attribute("telegram.messages_limit", limit or "none")
+            span.set_attribute("telegram.offset_date", str(offset_date or "none"))
+            span.set_attribute("telegram.search_query", search or "none")
 
             self.logger.info(
                 "iterating_messages",
                 entity=str(entity),
-                limit=limit,
-                offset_date=offset_date,
-                search=search,
+                limit=limit or "none",
+                offset_date=str(offset_date) or "none",
+                search=search or "none",
                 stage="start",
             )
-            span.add_event("iter_messages_started")
             message_count = 0
 
             async for message in self._telethon_client.iter_messages(
@@ -363,8 +352,8 @@ class TelegramClient(ITelegramClient):
                 "iter_messages_completed",
                 entity=str(entity),
                 yielded_count=message_count,
+                stage="complete",
             )
-            span.add_event("iter_messages_completed")
 
     @override
     @handle_telethon_errors
@@ -383,7 +372,6 @@ class TelegramClient(ITelegramClient):
                 message_id=getattr(message, "id", None),
                 stage="start",
             )
-            span.add_event("download_started")
 
             result = await self._telethon_client.download_media(
                 message,
@@ -395,9 +383,8 @@ class TelegramClient(ITelegramClient):
                 len(result) if isinstance(result, (bytes, bytearray)) else "path"
             )
             self.logger.info(
-                "media_downloaded", result_size=result_size, stage="success"
+                "media_downloaded", result_size=result_size, stage="complete"
             )
-            span.add_event("download_completed")
             return result
 
     @override
@@ -417,7 +404,6 @@ class TelegramClient(ITelegramClient):
             self.logger.info(
                 "downloading_profile_photo", entity=str(entity), stage="start"
             )
-            span.add_event("download_started")
 
             result = await self._telethon_client.download_profile_photo(
                 entity,
@@ -427,8 +413,7 @@ class TelegramClient(ITelegramClient):
 
             self.logger.info(
                 "profile_photo_downloaded",
-                result_path=result or "none",
                 stage="success",
             )
-            span.add_event("download_completed")
+
             return result

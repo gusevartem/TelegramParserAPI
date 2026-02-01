@@ -142,7 +142,6 @@ class RabbitMQSessionStorage(ITelegramSessionStorage):
             )
 
             logger.info("waiting_for_session", stage="start")
-            span.add_event("consume_started")
 
             async with queue.iterator() as queue_iter:
                 try:
@@ -151,23 +150,21 @@ class RabbitMQSessionStorage(ITelegramSessionStorage):
                     )
                 except (asyncio.TimeoutError, StopAsyncIteration) as e:
                     logger.warning("session_consume_timeout", timeout=timeout)
-                    span.add_event("consume_timeout")
                     raise TimeoutError("Cannot get session from queue") from e
 
             try:
                 telegram_session = TelegramSession.model_validate_json(message.body)
             except ValidationError as e:
-                logger.error("invalid_session_message", error=str(e), exc_info=True)
+                logger.error("invalid_session_message", exc_info=True)
                 span.set_status(Status(StatusCode.ERROR, "Invalid session message"))
                 span.record_exception(e)
                 await message.reject(requeue=False)
                 raise InvalidClient("Unexpected message in session queue") from e
 
             logger.info(
-                "session_received", user_id=telegram_session.user_id, stage="success"
+                "session_received", user_id=telegram_session.user_id, stage="complete"
             )
             span.set_attribute("session.user_id", telegram_session.user_id)
-            span.add_event("session_received")
 
             try:
                 yield telegram_session
@@ -186,7 +183,7 @@ class RabbitMQSessionStorage(ITelegramSessionStorage):
                 )
 
                 await message.ack()
-                span.add_event("session_returned")
+                logger.info("session_returned")
 
             except ClientBanned as e:
                 # Бан
@@ -219,7 +216,6 @@ class RabbitMQSessionStorage(ITelegramSessionStorage):
                     delay_seconds=e.seconds + 10,
                     delay_ms=delay_ms,
                 )
-                span.add_event("flood_wait_delay", {"delay_ms": delay_ms})
 
                 delayed_exchange = await self._channel.get_exchange(
                     self.settings.session_storage_delayed_exchange_name
@@ -264,7 +260,6 @@ class RabbitMQSessionStorage(ITelegramSessionStorage):
             await self.setup(self._channel, self.settings, logger)
 
             logger.info("adding_session", stage="start")
-            span.add_event("add_started")
 
             telegram_session = TelegramSession(
                 user_id=user_id,
@@ -278,5 +273,4 @@ class RabbitMQSessionStorage(ITelegramSessionStorage):
                 ),
                 routing_key=self.settings.session_storage_queue_name,
             )
-            logger.info("session_added", stage="success")
-            span.add_event("add_completed")
+            logger.info("session_added", stage="complete")
