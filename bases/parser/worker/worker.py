@@ -332,6 +332,20 @@ class Worker:
                         task_with_same_channel.channel_id,
                     )
 
+            task_logger.info("updating_current_task_channel_id")
+            persistence_parsing_task = await parsing_task_dao.find_by_id(task.id)
+            if persistence_parsing_task is None:
+                task_logger.error("task_deleted_while_processing")
+                task_span.set_status(
+                    Status(StatusCode.ERROR, "Task was deleted while processing")
+                )
+                raise InvalidTask("Task was deleted while processing")
+
+            persistence_parsing_task.channel_id = channel_entity.id
+            await parsing_task_dao.save(persistence_parsing_task)
+            await parsing_task_dao.commit()
+            task_logger.info("updated_current_task_channel_id")
+
         full_channel = await client(
             functions.channels.GetFullChannelRequest(channel_entity)  # pyright: ignore[reportArgumentType]
         )
