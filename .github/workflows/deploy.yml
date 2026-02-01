@@ -3,7 +3,7 @@ name: Deploy
 on:
   push:
     branches:
-      - v2/build
+      - v2/main
 
 jobs:
   copy:
@@ -55,6 +55,7 @@ jobs:
 
       - name: Create .env file
         run: |
+          echo "OPENSEARCH_INITIAL_ADMIN_PASSWORD=${{ secrets.OPENSEARCH_INITIAL_ADMIN_PASSWORD }}" >> .env
           echo "SECRET_KEY=${{ secrets.SECRET_KEY }}" >> .env
           echo "SAVE_TELEGRAM_RESPONSES=${{ vars.SAVE_TELEGRAM_RESPONSES }}" >> .env
 

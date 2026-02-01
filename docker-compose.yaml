@@ -5,6 +5,8 @@ x-depends_on: &additional_services_healthy
     condition: service_healthy
   minio:
     condition: service_healthy
+  jaeger:
+    condition: service_started
 
 services:
   # Additional
@@ -75,11 +77,37 @@ services:
       timeout: 20s
       retries: 3
 
+  opensearch:
+    image: opensearchproject/opensearch:3.4.0
+    environment:
+      - discovery.type=single-node
+      - plugins.security.disabled=true
+      - http.host=0.0.0.0
+      - transport.host=127.0.0.1
+      - OPENSEARCH_INITIAL_ADMIN_PASSWORD=${OPENSEARCH_INITIAL_ADMIN_PASSWORD}
+      - "OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m"
+    ports:
+      - "127.0.0.1:9200:9200"
+    volumes:
+      - opensearch-data:/usr/share/opensearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9200 || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 30
+
   jaeger:
     image: cr.jaegertracing.io/jaegertracing/jaeger:2.14.1
     restart: always
     ports:
       - "127.0.0.1:16686:16686"
+    volumes:
+      - "./jaeger/jaeger-ui.json:/etc/jaeger/jaeger-ui.json"
+      - "./jaeger/config.yml:/etc/jaeger/config.yml"
+    command: ["--config", "/etc/jaeger/config.yml"]
+    depends_on:
+      opensearch:
+        condition: service_healthy
 
   # Services
 
@@ -143,7 +171,7 @@ services:
       <<: *additional_services_healthy
       migrator:
         condition: service_started
-  
+
   scheduler:
     build:
       context: projects/scheduler
@@ -168,7 +196,7 @@ services:
       <<: *additional_services_healthy
       migrator:
         condition: service_started
-  
+
   worker:
     build:
       context: projects/worker
@@ -217,3 +245,4 @@ volumes:
   mysql-data:
   rabbitmq-data:
   minio-data:
+  opensearch-data:
