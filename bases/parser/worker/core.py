@@ -12,10 +12,15 @@ from parser.settings import ProjectSettings, ProjectSettingsProvider
 from parser.storage import StorageProvider
 from parser.telegram import TelegramProvider
 
+from .settings import WorkerSettings
 from .worker import Worker
 
 
 class WorkerProvider(Provider):
+    @provide(scope=Scope.APP)
+    def settings(self) -> WorkerSettings:
+        return WorkerSettings()
+
     worker: CompositeDependencySource = provide(
         Worker,
         scope=Scope.APP,

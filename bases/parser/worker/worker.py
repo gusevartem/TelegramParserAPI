@@ -35,6 +35,7 @@ from telethon import errors, functions, types
 from telethon.tl.types import Channel
 
 from .exceptions import TaskError, TaskExists, TemporaryCannotProcessTask
+from .settings import WorkerSettings
 
 
 @dataclass
@@ -53,11 +54,13 @@ class Worker:
         message_broker: IMessageBroker,
         storage: IStorage,
         dao_factory: MultipleDAOFactory,
+        settings: WorkerSettings,
     ):
         self._telegram: ITelegram = telegram
         self._message_broker: IMessageBroker = message_broker
         self._storage: IStorage = storage
         self._dao_factory: MultipleDAOFactory = dao_factory
+        self.settings: WorkerSettings = settings
 
         self.logger: structlog.BoundLogger = structlog.get_logger()
         self.tracer: trace.Tracer = trace.get_tracer("worker")
@@ -399,19 +402,21 @@ class Worker:
             task_logger.info("saving_channel_statistic_to_database")
 
             now_utc = datetime.now(timezone.utc)
-            time_limit_24h = now_utc - timedelta(hours=72)
+            stat_time_limit = now_utc - timedelta(
+                hours=self.settings.channel_messages_stat_time_limit_hours
+            )
 
-            messages_24h = [
+            messages_stat = [
                 message
                 for message in collected_messages
-                if message.created_at > time_limit_24h
+                if message.created_at > stat_time_limit
             ]
 
             await channel_statistic_dao.create(
                 channel=persistence_channel,
                 subscribers_count=full_channel.full_chat.participants_count or 0,  # pyright: ignore[reportAttributeAccessIssue]
-                views=sum(message.views for message in messages_24h),
-                posts_count=len(messages_24h),
+                views=sum(message.views for message in messages_stat),
+                posts_count=len(messages_stat),
             )
 
             task_logger.info("channel_statistic_saved_to_database")
@@ -633,7 +638,9 @@ class Worker:
             logger = self.logger.bind(channel_id=channel.id)
             span.set_attribute("channel.id", channel.id)
             now_utc = datetime.now(timezone.utc)
-            time_limit_72h = now_utc - timedelta(hours=72)
+            time_limit = now_utc - timedelta(
+                hours=self.settings.message_monitoring_time_limit_hours
+            )
 
             grouped_messages: dict[int, _ParsedMessage] = {}
 
@@ -642,7 +649,7 @@ class Worker:
                     continue
 
                 message_date = message.date.astimezone(timezone.utc)
-                if message_date < time_limit_72h:
+                if message_date < time_limit:
                     break
 
                 group_key = message.grouped_id if message.grouped_id else message.id

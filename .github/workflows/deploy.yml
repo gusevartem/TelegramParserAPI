@@ -80,6 +80,9 @@ jobs:
           echo "DEFAULT_LANG_CODE=${{ vars.DEFAULT_LANG_CODE }}" >> .env
           echo "DEFAULT_SYSTEM_LANG_CODE=${{ vars.DEFAULT_SYSTEM_LANG_CODE }}" >> .env
 
+          echo "MESSAGE_MONITORING_TIME_LIMIT_HOURS=${{ vars.MESSAGE_MONITORING_TIME_LIMIT_HOURS }}" >> .env
+          echo "CHANNEL_MESSAGES_STAT_TIME_LIMIT_HOURS=${{ vars.CHANNEL_MESSAGES_STAT_TIME_LIMIT_HOURS }}" >> .env
+
       - name: Transfer files to server
         uses: appleboy/scp-action@v1
         with:
