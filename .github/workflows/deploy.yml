@@ -110,8 +110,8 @@ jobs:
             cd /home/${{ secrets.SERVER_USER }}/TelegramParserAPI/
             unzip -o deploy.zip
             sudo docker compose build
-            sudo docker compose stop worker
-            sudo docker compose down
+            sudo docker compose stop migrator api scheduler worker
+            sudo docker compose down migrator api scheduler worker
             sudo docker compose up -d --remove-orphans
             sudo docker image prune -f
             rm /home/${{ secrets.SERVER_USER }}/TelegramParserAPI/deploy.zip
