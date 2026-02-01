@@ -25,7 +25,7 @@ extensions:
 
 connectors:
   spanmetrics:
-    flush_interval: 5s
+    metrics_flush_interval: 5s
 
 receivers:
   otlp:
@@ -40,4 +40,3 @@ processors:
 exporters:
   jaeger_storage_exporter:
     trace_storage: opensearch_trace_storage
-    metric_storage: opensearch_trace_storage
