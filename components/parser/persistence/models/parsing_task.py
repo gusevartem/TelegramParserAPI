@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any, override
 from uuid import UUID, uuid4
@@ -28,7 +28,7 @@ class ParsingTask(BaseModel):
     __tablename__: str = "parsing_task"
 
     __table_args__: tuple[Any, ...] = (
-        CheckConstraint("bucket >= 0 AND bucket < 1440", name="check_bucket_range"),
+        CheckConstraint("bucket >= 0 AND bucket < 60", name="check_bucket_range"),
     )
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
@@ -90,29 +90,27 @@ class ParsingTaskDAO(BaseDAO[ParsingTask, UUID]):
 
         return {bucket: count for bucket, count in result.all() if count > 0}
 
-    async def get_scheduled_tasks(
-        self, current_minute_of_day: int, limit: int = 1000
-    ) -> Sequence[ParsingTask]:
+    async def get_scheduled_tasks(self, limit: int = 1000) -> Sequence[ParsingTask]:
         """Получение задач, которые пора парсить
-
-        Args:
-            current_minute_of_day (int): текущая минута
 
         Returns:
             Sequence[ParsingTask]: список задач
         """
+        now_utc = datetime.now(timezone.utc)
+        this_hour_start = now_utc.replace(minute=0, second=0, microsecond=0)
+
         stmt = (
             select(ParsingTask)
             .where(ParsingTask.status == ParsingTaskStatus.IDLE)
-            .where(ParsingTask.bucket <= current_minute_of_day)
+            .where(ParsingTask.bucket <= now_utc.minute)
             .where(
                 (
                     (ParsingTask.last_parsed_at.is_not(None))
-                    & (ParsingTask.last_parsed_at < func.current_date())
+                    & (ParsingTask.last_parsed_at < this_hour_start)
                 )
                 | (
                     (ParsingTask.last_parsed_at.is_(None))
-                    & (ParsingTask.created_at < func.current_date())
+                    & (ParsingTask.created_at < this_hour_start)
                 )
             )
             .order_by(ParsingTask.bucket.asc())

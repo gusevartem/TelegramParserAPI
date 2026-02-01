@@ -80,8 +80,8 @@ async def run_scheduler() -> None:
                     span.set_status(trace.Status(trace.StatusCode.ERROR, str(e)))
                     span.record_exception(e)
 
-            logger.info("sleeping", duration_seconds=60)
-            await asyncio.sleep(60)
+            logger.info("sleeping", duration_seconds=30)
+            await asyncio.sleep(30)
     finally:
         await container.close()
 

@@ -24,21 +24,15 @@ def calculate_next_run(
         return None
 
     now = datetime.now(timezone.utc)
-    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    this_hour_start = now.replace(minute=0, second=0, microsecond=0)
 
-    bucket_time_today = today_start + timedelta(minutes=bucket)
-
-    if last_parsed_at is not None:
-        return (
-            bucket_time_today
-            if last_parsed_at.astimezone(timezone.utc) < today_start
-            else bucket_time_today + timedelta(days=1)
-        )
+    bucket_time_this_hour = this_hour_start + timedelta(minutes=bucket)
+    reference_time = last_parsed_at if last_parsed_at is not None else created_at
 
     return (
-        bucket_time_today
-        if created_at.astimezone(timezone.utc) < today_start
-        else bucket_time_today + timedelta(days=1)
+        bucket_time_this_hour
+        if reference_time.astimezone(timezone.utc) < bucket_time_this_hour
+        else bucket_time_this_hour + timedelta(hours=1)
     )
 
 
@@ -80,9 +74,9 @@ class AddTask:
             )
 
         buckets_loadings = await self.parsing_task_dao.get_buckets_loading()
-        minutes_in_hour = 24 * 60
-        if len(buckets_loadings) < minutes_in_hour:
-            for bucket in range(minutes_in_hour):
+        minutes_in_cycle = 60
+        if len(buckets_loadings) < minutes_in_cycle:
+            for bucket in range(minutes_in_cycle):
                 if bucket not in buckets_loadings:
                     return await create_task_and_generate_dto(bucket)
 
@@ -98,10 +92,8 @@ class GetTasks:
     async def __call__(
         self, set_processing: bool, tasks_limit: int
     ) -> AsyncIterable[ParsingTaskDTO]:
-        now = datetime.now(timezone.utc)
-        current_minute = now.hour * 60 + now.minute
         tasks_persistence = await self.parsing_task_dao.get_scheduled_tasks(
-            current_minute_of_day=current_minute, limit=tasks_limit
+            limit=tasks_limit
         )
         for task in tasks_persistence:
             if set_processing:
