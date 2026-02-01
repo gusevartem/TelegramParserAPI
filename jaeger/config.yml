@@ -4,9 +4,6 @@ service:
     traces:
       receivers: [otlp]
       processors: [batch]
-      exporters: [jaeger_storage_exporter, spanmetrics]
-    metrics:
-      receivers: [spanmetrics]
       exporters: [jaeger_storage_exporter]
 
 extensions:
@@ -22,10 +19,6 @@ extensions:
             - http://opensearch:9200
     metric_backends:
       opensearch_trace_storage: *opensearch_config
-
-connectors:
-  spanmetrics:
-    metrics_flush_interval: 5s
 
 receivers:
   otlp:
