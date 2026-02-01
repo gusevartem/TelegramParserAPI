@@ -332,20 +332,6 @@ class Worker:
                         task_with_same_channel.channel_id,
                     )
 
-            task_logger.info("updating_current_task_channel_id")
-            persistence_parsing_task = await parsing_task_dao.find_by_id(task.id)
-            if persistence_parsing_task is None:
-                task_logger.error("task_deleted_while_processing")
-                task_span.set_status(
-                    Status(StatusCode.ERROR, "Task was deleted while processing")
-                )
-                raise InvalidTask("Task was deleted while processing")
-
-            persistence_parsing_task.channel_id = channel_entity.id
-            await parsing_task_dao.save(persistence_parsing_task)
-            await parsing_task_dao.commit()
-            task_logger.info("updated_current_task_channel_id")
-
         full_channel = await client(
             functions.channels.GetFullChannelRequest(channel_entity)  # pyright: ignore[reportArgumentType]
         )
@@ -368,6 +354,7 @@ class Worker:
 
         async with self._dao_factory() as dao_factory:
             task_logger.info("saving_channel_to_database")
+            parsing_task_dao = dao_factory(ParsingTaskDAO)
             channel_dao = dao_factory(ChannelDAO)
             media_dao = dao_factory(MediaDAO)
             channel_statistic_dao = dao_factory(ChannelStatisticDAO)
@@ -434,6 +421,19 @@ class Worker:
             )
 
             task_logger.info("channel_statistic_saved_to_database")
+
+            task_logger.info("updating_current_task_channel_id")
+            persistence_parsing_task = await parsing_task_dao.find_by_id(task.id)
+            if persistence_parsing_task is None:
+                task_logger.error("task_deleted_while_processing")
+                task_span.set_status(
+                    Status(StatusCode.ERROR, "Task was deleted while processing")
+                )
+                raise InvalidTask("Task was deleted while processing")
+
+            persistence_parsing_task.channel_id = channel_entity.id
+            await parsing_task_dao.save(persistence_parsing_task)
+            task_logger.info("updated_current_task_channel_id")
 
             await dao_factory.commit()
         task_logger.info("channel_saved_to_database")
