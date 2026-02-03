@@ -16,6 +16,7 @@ class APISettings(BaseSettings):
     app_name: str = "Telegram Parser API"
     api_prefix: str = "/api"
     api_port: int = 8080
+    s3_public_url: str | None = None
 
     @property
     def methods_prefix(self) -> str:

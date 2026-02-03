@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import TYPE_CHECKING, Literal, override
-from uuid import UUID
+from typing import TYPE_CHECKING, Any, Literal, override
+from uuid import UUID, uuid4
 
-from sqlalchemy import BigInteger, ForeignKey, Text, func, select
+from sqlalchemy import BigInteger, ForeignKey, Text, UniqueConstraint, func, select
 from sqlalchemy.ext.associationproxy import AssociationProxy, association_proxy
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.orm import Mapped, mapped_column, relationship, selectinload
@@ -21,7 +21,14 @@ if TYPE_CHECKING:
 class ChannelMessage(BaseModel):
     __tablename__: str = "channel_message"
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=False)
+    __table_args__: tuple[Any, ...] = (
+        UniqueConstraint(
+            "channel_message_id", "channel_id", name="uq_channel_message_channel"
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    channel_message_id: Mapped[int] = mapped_column(BigInteger, index=True)
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True))
     text: Mapped[str] = mapped_column(Text)
     channel_id: Mapped[int] = mapped_column(
@@ -49,16 +56,16 @@ class ChannelMessage(BaseModel):
     )
 
 
-class ChannelMessageDAO(BaseDAO[ChannelMessage, int]):
+class ChannelMessageDAO(BaseDAO[ChannelMessage, UUID]):
     def __init__(self, session: AsyncSession) -> None:
         super().__init__(session, ChannelMessage)
 
     @override
     async def create(
-        self, channel: Channel, id: int, created_at: datetime, text: str
+        self, channel: Channel, channel_message_id: int, created_at: datetime, text: str
     ) -> ChannelMessage:
         new_message = ChannelMessage(
-            id=id,
+            channel_message_id=channel_message_id,
             created_at=created_at,
             text=text,
             channel=channel,
@@ -97,7 +104,7 @@ class ChannelMessageDAO(BaseDAO[ChannelMessage, int]):
         return list(result.scalars().all())
 
     async def find_with_loaded_statistics_and_media(
-        self, message_id: int
+        self, message_id: UUID
     ) -> ChannelMessage | None:
         stmt = (
             select(ChannelMessage)
@@ -108,6 +115,18 @@ class ChannelMessageDAO(BaseDAO[ChannelMessage, int]):
                 ),
             )
             .where(ChannelMessage.id == message_id)
+        )
+
+        result = await self._session.execute(stmt)
+        return result.scalars().first()
+
+    async def find_by_channel_id_and_message_id(
+        self, channel_id: int, message_id: int
+    ) -> ChannelMessage | None:
+        stmt = (
+            select(ChannelMessage)
+            .where(ChannelMessage.channel_id == channel_id)
+            .where(ChannelMessage.channel_message_id == message_id)
         )
 
         result = await self._session.execute(stmt)
@@ -125,7 +144,7 @@ class MessageMediaLink(BaseModel):
     media_id: Mapped[UUID] = mapped_column(
         ForeignKey("media.id", ondelete="CASCADE"), primary_key=True
     )
-    message_id: Mapped[int] = mapped_column(
+    message_id: Mapped[UUID] = mapped_column(
         ForeignKey("channel_message.id", ondelete="CASCADE"),
     )
 

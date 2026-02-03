@@ -721,8 +721,10 @@ class Worker:
                     raise TaskError(f"Channel with id {channel_id} not found")
 
                 for message in collected_messages:
-                    persistence_message = await channel_message_dao.find_by_id(
-                        message.id
+                    persistence_message = (
+                        await channel_message_dao.find_by_channel_id_and_message_id(
+                            channel_id, message.id
+                        )
                     )
                     if persistence_message is not None:
                         persistence_message.text = message.text

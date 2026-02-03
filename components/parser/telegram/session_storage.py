@@ -225,8 +225,10 @@ class RabbitMQSessionStorage(ITelegramSessionStorage):
                         body=TelegramSession.model_dump_json(telegram_session).encode(),
                         delivery_mode=aio_pika.DeliveryMode.PERSISTENT,
                         headers={"x-delay": delay_ms},
+                        content_type="application/json",
                     ),
                     routing_key=self.settings.session_storage_queue_name,
+                    mandatory=False,
                 )
 
                 await message.ack()

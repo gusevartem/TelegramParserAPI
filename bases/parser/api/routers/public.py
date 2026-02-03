@@ -6,6 +6,7 @@ from dishka.integrations.fastapi import DishkaRoute, FromDishka
 from fastapi import APIRouter, status
 from opentelemetry import trace
 from opentelemetry.trace import Status, StatusCode
+from parser.api.settings import APISettings
 from parser.api.utils import CustomHTTPException, ErrorResponse
 from parser.dto import (
     Channel,
@@ -21,6 +22,7 @@ from parser.persistence import (
     MediaDAO,
 )
 from parser.storage import IStorage
+from yarl import URL
 
 router = APIRouter(
     prefix="/public",
@@ -40,7 +42,10 @@ tracer: Final[trace.Tracer] = trace.get_tracer("api.public")
     },
 )
 async def get_media(
-    media_id: UUID, storage: FromDishka[IStorage], media_dao: FromDishka[MediaDAO]
+    media_id: UUID,
+    storage: FromDishka[IStorage],
+    media_dao: FromDishka[MediaDAO],
+    api_settings: FromDishka[APISettings],
 ) -> MediaWithURL:
     with tracer.start_as_current_span("api.get_media") as span:
         request_logger = logger.bind(media_id=media_id)
@@ -61,6 +66,13 @@ async def get_media(
         request_logger.info("media_found", id=media.id, file_name=media.file_name)
         request_logger.info("generating_presigned_url", stage="start")
         url = await storage.generate_presigned_url(media.file_name)
+
+        if api_settings.s3_public_url is not None:
+            internal_url = URL(url)
+            public_base = URL(api_settings.s3_public_url)
+            url = str(
+                public_base.with_path(internal_url.path).with_query(internal_url.query)
+            )
 
         result = MediaWithURL.from_media(Media.from_persistence(media), url)
         request_logger.info("get_media_request_completed", stage="complete")
@@ -212,7 +224,7 @@ async def get_channel_messages(
     },
 )
 async def get_message(
-    message_id: int,
+    message_id: UUID,
     channel_message_dao: FromDishka[ChannelMessageDAO],
 ) -> ChannelMessage:
     with tracer.start_as_current_span("api.get_message") as span:

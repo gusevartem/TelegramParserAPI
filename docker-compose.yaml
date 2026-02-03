@@ -43,6 +43,7 @@ services:
 
   rabbitmq:
     image: heidiks/rabbitmq-delayed-message-exchange:4.2.0-management
+    hostname: telegram-rabbit
     restart: always
     ports:
       - "127.0.0.1:15672:15672"
@@ -152,6 +153,7 @@ services:
       - S3_BUCKET_NAME=${S3_BUCKET_NAME}
       - S3_REGION_NAME=us-east-1
       - S3_ENDPOINT_URL=http://minio:9000
+      - S3_PUBLIC_URL=${MINIO_SERVER_URL}
 
       - RABBITMQ_HOST=rabbitmq
       - RABBITMQ_PORT=5672

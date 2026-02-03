@@ -19,7 +19,7 @@ class ChannelMessageStatistic(BaseModel):
     __tablename__: str = "channel_message_statistic"
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
-    message_id: Mapped[int] = mapped_column(
+    channel_message_id: Mapped[UUID] = mapped_column(
         ForeignKey("channel_message.id", ondelete="CASCADE"), index=True
     )
     views: Mapped[int] = mapped_column()

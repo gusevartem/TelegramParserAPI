@@ -104,7 +104,8 @@ class ChannelMessageStatistic(BaseModel):
 
 
 class ChannelMessage(BaseModel):
-    id: int
+    id: UUID
+    channel_message_id: int
     created_at: int
     text: str
     media: list[Media]
@@ -116,6 +117,7 @@ class ChannelMessage(BaseModel):
     def from_persistence(message: ChannelMessagePersistence) -> ChannelMessage:
         return ChannelMessage(
             id=message.id,
+            channel_message_id=message.channel_message_id,
             created_at=int(message.created_at.timestamp()),
             text=message.text,
             media=[Media.from_persistence(media) for media in message.media],
