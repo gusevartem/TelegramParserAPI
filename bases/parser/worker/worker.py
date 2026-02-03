@@ -1,4 +1,5 @@
 import asyncio
+import time
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -68,7 +69,12 @@ class Worker:
     async def start(self, tasks_timeout_sleep: int = 5) -> None:
         try:
             async with self._telegram.get_client() as client:
+                start_time = time.time()
+                max_session_duration = 20 * 60 * 60  # 20 hours
                 while True:
+                    if time.time() - start_time > max_session_duration:
+                        self.logger.info("session_ttl_expired_releasing")
+                        break
                     with self.tracer.start_as_current_span("worker.wait_task") as span:
                         wait_timeout = 600
                         span.set_attribute("wait_timeout", wait_timeout)
