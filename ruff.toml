@@ -1,0 +1,5 @@
+exclude = [
+    "components/parser/opentele/*",
+]
+[lint]
+select = ["E", "F", "I", "UP"]
