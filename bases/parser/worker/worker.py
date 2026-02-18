@@ -482,8 +482,8 @@ class Worker:
                     check_res = await client(
                         functions.messages.CheckChatInviteRequest(hash_part)
                     )
-
                     if isinstance(check_res, types.ChatInviteAlready):
+                        logger.info("already_joined_via_link")
                         if not isinstance(check_res.chat, types.Channel):
                             logger.error(
                                 "unexpected_chat_type",
@@ -498,30 +498,42 @@ class Worker:
                                 )
                             )
                             raise TaskError(
-                                f"Unexpected chat type: {type(check_res.chat).__name__}"
+                                f"Link points to {type(check_res.chat).__name__}, "
+                                + "not Channel"
                             )
-
-                        logger.info("got_channel_entity")
                         return check_res.chat
 
-                    elif isinstance(check_res, types.ChatInvite):
-                        if not check_res.channel and not check_res.broadcast:
-                            logger.error("link_points_to_group_or_chat")
-                            span.set_status(
-                                Status(
-                                    StatusCode.ERROR,
-                                    "Link points to a Group/Chat, not a Channel",
+                    elif isinstance(
+                        check_res, (types.ChatInvitePeek, types.ChatInvite)
+                    ):
+                        if isinstance(check_res, types.ChatInvitePeek):
+                            if not isinstance(check_res.chat, types.Channel):
+                                raise TaskError(
+                                    f"Peek Entity is {type(check_res.chat).__name__}, "
+                                    + "not Channel"
                                 )
-                            )
-                            raise TaskError(
-                                "Link points to a Group/Chat, not a Channel"
+                            logger.info(
+                                "peek_preview_received_joining",
+                                title=check_res.chat.title,
                             )
 
-                        logger.info("joining_channel")
+                        if isinstance(check_res, types.ChatInvite):
+                            if not check_res.channel and not check_res.broadcast:
+                                logger.error("link_points_to_group_or_chat")
+                                span.set_status(
+                                    Status(
+                                        StatusCode.ERROR,
+                                        "Link points to a Group/Chat, not a Channel",
+                                    )
+                                )
+                                raise TaskError(
+                                    "Link points to Group/Chat, not Channel"
+                                )
+                            logger.info("valid_invite_received_joining")
+
                         updates = await client(
                             functions.messages.ImportChatInviteRequest(hash_part)
                         )
-
                         if not isinstance(updates, types.Updates):
                             logger.warning(
                                 "unexpected_updates_type",
@@ -539,28 +551,7 @@ class Worker:
                                 f"Unexpected updates type: {type(updates).__name__}"
                             )
 
-                        if len(updates.chats) != 0:
-                            entity = updates.chats[0]
-                            if not isinstance(entity, types.Channel):
-                                logger.warning(
-                                    "unexpected_chat_type",
-                                    chat_type=type(entity).__name__,
-                                    expect="Channel",
-                                )
-                                span.set_status(
-                                    Status(
-                                        StatusCode.ERROR,
-                                        "Unexpected chat type: "
-                                        + f"{type(entity).__name__}",
-                                    )
-                                )
-                                raise TaskError(
-                                    f"Unexpected chat type: {type(entity).__name__}"
-                                )
-
-                            logger.info("got_channel_entity")
-                            return entity
-                        else:
+                        if len(updates.chats) == 0:
                             logger.error("update_did_not_contain_any_chats")
                             span.set_status(
                                 Status(
@@ -569,6 +560,27 @@ class Worker:
                                 )
                             )
                             raise TaskError("Update did not contain any chats")
+
+                        entity = updates.chats[0]
+                        if not isinstance(entity, types.Channel):
+                            logger.warning(
+                                "unexpected_chat_type",
+                                chat_type=type(entity).__name__,
+                                expect="Channel",
+                            )
+                            span.set_status(
+                                Status(
+                                    StatusCode.ERROR,
+                                    "Unexpected chat type: "
+                                    + f"{type(entity).__name__}",
+                                )
+                            )
+                            raise TaskError(
+                                f"Unexpected chat type: {type(entity).__name__}"
+                            )
+
+                        logger.info("got_channel_entity")
+                        return entity
 
                     logger.info(
                         "unknown_response_type", response_type=type(check_res).__name__
@@ -629,6 +641,13 @@ class Worker:
                         raise TaskError(
                             "Resolved entity is not a Channel. "
                             + f"It is {type(entity).__name__}"
+                        )
+                    if (entity.left is None) or entity.left:
+                        logger.info("channel_is_public_joining", username=username)
+                        await client(
+                            functions.channels.JoinChannelRequest(
+                                types.InputChannel(entity.id, entity.access_hash or 0)
+                            )
                         )
                     return entity
                 except ValueError as e:

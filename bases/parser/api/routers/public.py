@@ -232,7 +232,9 @@ async def get_message(
         request_logger = logger.bind(message_id=message_id)
         request_logger.info("received_get_message_request", stage="start")
 
-        message = await channel_message_dao.find_by_id(message_id)
+        message = await channel_message_dao.find_with_loaded_statistics_and_media(
+            message_id
+        )
         if message is None:
             request_logger.error("message_not_found", stage="error")
             span.set_status(status=Status(StatusCode.ERROR, "Message not found"))

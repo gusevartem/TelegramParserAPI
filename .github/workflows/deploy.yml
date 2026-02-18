@@ -3,7 +3,7 @@ name: Deploy
 on:
   push:
     branches:
-      - v2/main
+      - main
 
 jobs:
   copy:
@@ -110,8 +110,8 @@ jobs:
             cd /home/${{ secrets.SERVER_USER }}/TelegramParserAPI/
             unzip -o deploy.zip
             sudo docker compose build
-            sudo docker compose stop
-            sudo docker compose down
+            sudo docker compose stop api worker
+            sudo docker compose down api worker
             sudo docker compose up -d --remove-orphans
             sudo docker image prune -f
             rm /home/${{ secrets.SERVER_USER }}/TelegramParserAPI/deploy.zip

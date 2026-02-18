@@ -3,7 +3,6 @@ name = "parser"
 version = "0.1.0"
 description = ""
 authors = ["ycalk <alosev752@gmail.com>"]
-package-mode = false
 packages = [
     {include = "parser/api",from = "bases"},
     {include = "parser/persistence",from = "components"},

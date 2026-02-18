@@ -44,8 +44,13 @@ def _telethon_exception_handler():
         errors.AuthKeyDuplicatedError,
         errors.SessionRevokedError,
         errors.AuthKeyUnregisteredError,
+        errors.UserDeactivatedBanError,
+        errors.PeerFloodError,
+        errors.UserRestrictedError,
     ) as e:
         raise ClientBanned(f"Client banned or invalid: {str(e)}") from e
+    except (ConnectionError, ConnectionResetError, OSError) as e:
+        raise FloodWait(seconds=5, message=str(e)) from e
 
 
 def handle_telethon_errors(
@@ -201,6 +206,9 @@ class TelegramClient(ITelegramClient):
                 )
 
             self.logger.info("telegram_client_connected", stage="complete")
+            me = await self.get_me()
+            span.set_attribute("telegram.user_id", me.id)
+
             return self
 
     @override
@@ -259,6 +267,14 @@ class TelegramClient(ITelegramClient):
                 self.logger.error("unexpected_user_type", user_type=type(user).__name__)
                 raise ValueError(
                     f"Unexpected user type. Got {type(user).__name__}, expected User"
+                )
+            if user.restricted:
+                self.logger.warning(
+                    "user_is_restricted",
+                    restriction_reason=str(user.restriction_reason),
+                )
+                raise ClientBanned(
+                    f"User is restricted/frozen. Reasons: {user.restriction_reason}"
                 )
 
             if self.settings.save_telegram_responses:
