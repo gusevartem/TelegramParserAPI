@@ -30,6 +30,11 @@ from .telegram_client import (
     TelegramClientDAOFactory,
     TelegramClientProxy,
 )
+from .worker_account_usage import (
+    WorkerAccountUsage,
+    WorkerAccountUsageDAO,
+    WorkerAccountUsageDAOFactory,
+)
 
 __all__ = [
     "ChannelMessage",
@@ -58,4 +63,7 @@ __all__ = [
     "ParsingTaskDAOFactory",
     "ParsingTaskStatus",
     "MultipleDAOFactory",
+    "WorkerAccountUsage",
+    "WorkerAccountUsageDAO",
+    "WorkerAccountUsageDAOFactory",
 ]

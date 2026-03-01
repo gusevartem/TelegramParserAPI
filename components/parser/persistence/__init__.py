@@ -26,6 +26,9 @@ from .models import (
     TelegramClientDAO,
     TelegramClientDAOFactory,
     TelegramClientProxy,
+    WorkerAccountUsage,
+    WorkerAccountUsageDAO,
+    WorkerAccountUsageDAOFactory,
 )
 
 __all__ = [
@@ -57,4 +60,7 @@ __all__ = [
     "PersistenceProvider",
     "register_model",
     "MultipleDAOFactory",
+    "WorkerAccountUsage",
+    "WorkerAccountUsageDAO",
+    "WorkerAccountUsageDAOFactory",
 ]

@@ -6,7 +6,6 @@ from dishka import Provider, Scope, provide, provide_all
 from dishka.dependency_source import CompositeDependencySource
 from opentelemetry import trace
 from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
-from parser.settings import ProjectSettings
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -30,8 +29,9 @@ from .models import (
     ParsingTaskDAOFactory,
     TelegramClientDAO,
     TelegramClientDAOFactory,
+    WorkerAccountUsageDAO,
+    WorkerAccountUsageDAOFactory,
 )
-from .models._base import BaseModel
 from .settings import PersistenceSettings
 
 DatabaseUrl = NewType("DatabaseUrl", str)
@@ -48,6 +48,7 @@ def register_model() -> list[type]:
         ParsingTask,
         TelegramClient,
         TelegramClientProxy,
+        WorkerAccountUsage,
     )
 
     return [
@@ -60,43 +61,27 @@ def register_model() -> list[type]:
         TelegramClient,
         TelegramClientProxy,
         ParsingTask,
+        WorkerAccountUsage,
     ]
 
 
 class PersistenceProvider(Provider):
     @provide(scope=Scope.APP)
     def settings(self) -> PersistenceSettings:
-        return PersistenceSettings()
+        return PersistenceSettings()  # type: ignore  # pyright: ignore[reportCallIssue]
 
     @provide(scope=Scope.APP)
     def database_url(
         self,
-        project_settings: ProjectSettings,
         persistence_settings: PersistenceSettings,
     ) -> DatabaseUrl:
-        logger = structlog.get_logger("persistence")
-        if project_settings.debug:
-            url = "sqlite+aiosqlite:///:memory:"
-            logger.info("using_database", mode="debug", database_type="sqlite_memory")
-        else:
-            if any(
-                parameter is None
-                for parameter in (
-                    persistence_settings.mysql_user,
-                    persistence_settings.mysql_password,
-                    persistence_settings.mysql_host,
-                    persistence_settings.mysql_port,
-                    persistence_settings.mysql_database,
-                )
-            ):
-                raise ValueError("MySQL settings must be provided in non-debug mode")
-            url = (
-                f"mysql+asyncmy://{persistence_settings.mysql_user}"
-                + f":{persistence_settings.mysql_password}"
-                + f"@{persistence_settings.mysql_host}"
-                + f":{persistence_settings.mysql_port}"
-                + f"/{persistence_settings.mysql_database}"
-            )
+        url = (
+            f"mysql+asyncmy://{persistence_settings.mysql_user}"
+            + f":{persistence_settings.mysql_password}"
+            + f"@{persistence_settings.mysql_host}"
+            + f":{persistence_settings.mysql_port}"
+            + f"/{persistence_settings.mysql_database}"
+        )
         return DatabaseUrl(url)
 
     @provide(scope=Scope.APP)
@@ -104,7 +89,6 @@ class PersistenceProvider(Provider):
         self,
         database_url: DatabaseUrl,
         persistence_settings: PersistenceSettings,
-        project_settings: ProjectSettings,
     ) -> AsyncIterable[AsyncEngine]:
         register_model()
         logger = structlog.get_logger("persistence")
@@ -124,10 +108,6 @@ class PersistenceProvider(Provider):
             commenter_options={"trace_id": True, "span_id": True},
         )
         logger.info("database_engine_created")
-        if project_settings.debug:
-            logger.info("creating_all_tables", mode="debug")
-            async with engine.begin() as conn:
-                await conn.run_sync(BaseModel.metadata.create_all)
         try:
             yield engine
         finally:
@@ -158,6 +138,7 @@ class PersistenceProvider(Provider):
         ChannelMessageStatisticDAO,
         TelegramClientDAO,
         ParsingTaskDAO,
+        WorkerAccountUsageDAO,
         scope=Scope.REQUEST,
     )
 
@@ -169,6 +150,7 @@ class PersistenceProvider(Provider):
         ChannelMessageStatisticDAOFactory,
         TelegramClientDAOFactory,
         ParsingTaskDAOFactory,
+        WorkerAccountUsageDAOFactory,
         scope=Scope.APP,
     )
 

@@ -12,11 +12,11 @@ class PersistenceSettings(BaseSettings):
         extra="ignore",
     )
 
-    mysql_user: str | None = None
-    mysql_password: str | None = None
-    mysql_host: str | None = None
-    mysql_port: int | None = None
-    mysql_database: str | None = None
+    mysql_user: str
+    mysql_password: str
+    mysql_host: str
+    mysql_port: int
+    mysql_database: str
 
     mysql_pool_size: int = 10
     mysql_max_overflow: int = 20
