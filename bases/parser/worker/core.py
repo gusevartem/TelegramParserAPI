@@ -1,14 +1,12 @@
 import asyncio
-from importlib.metadata import version
 
 import structlog
 from dishka import Provider, Scope, make_async_container, provide
 from dishka.dependency_source import CompositeDependencySource
 from opentelemetry import trace
-from parser.logging import setup_logging
+from parser.logging import LoggingSettings, LoggingSettingsProvider, setup_logging
 from parser.message_broker import MessageBrokerProvider
 from parser.persistence import PersistenceProvider
-from parser.settings import ProjectSettings, ProjectSettingsProvider
 from parser.storage import StorageProvider
 from parser.telegram import TelegramProvider
 
@@ -32,13 +30,14 @@ async def run_worker() -> None:
     container = make_async_container(
         WorkerProvider(),
         PersistenceProvider(),
-        ProjectSettingsProvider(),
+        LoggingSettingsProvider(),
         StorageProvider(),
         TelegramProvider(),
         MessageBrokerProvider(),
     )
-    project_settings = await container.get(ProjectSettings)
-    setup_logging(project_settings, "worker", version("worker"))
+    logging_settings = await container.get(LoggingSettings)
+    worker_settings = await container.get(WorkerSettings)
+    setup_logging(logging_settings, "worker", worker_settings.worker_id)
 
     logger: structlog.BoundLogger = structlog.get_logger("worker")
     tracer = trace.get_tracer("worker")

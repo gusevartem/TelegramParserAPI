@@ -6,7 +6,6 @@ authors = ["ycalk <alosev752@gmail.com>"]
 packages = [
     {include = "parser/api",from = "bases"},
     {include = "parser/persistence",from = "components"},
-    {include = "parser/settings",from = "components"},
     {include = "parser/logging",from = "components"},
     {include = "parser/migrator",from = "bases"},
     {include = "parser/dto",from = "components"},
@@ -52,6 +51,8 @@ aiosqlite = {version = ">=0.22.1,<0.23.0"}
 types-aioboto3 = {extras = ["essential"], version = "^15.5.0"}
 tgcrypto = "^1.2.5"
 pyqt5 = "^5.15.11"
+pytest = "^9.0.2"
+pytest-asyncio = "^1.3.0"
 
 [tool.poetry.group.migrations.dependencies]
 alembic = {version = ">=1.18.1,<2.0.0"}

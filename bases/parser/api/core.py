@@ -1,6 +1,5 @@
 import asyncio
 from contextlib import asynccontextmanager
-from importlib.metadata import version
 
 from dishka import make_async_container
 from dishka.integrations.fastapi import setup_dishka
@@ -9,11 +8,10 @@ from fastapi.responses import JSONResponse
 from opentelemetry import trace
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from opentelemetry.trace import Status, StatusCode
-from parser.logging import setup_logging
+from parser.logging import LoggingSettings, LoggingSettingsProvider, setup_logging
 from parser.message_broker import MessageBrokerProvider
 from parser.persistence import PersistenceProvider
 from parser.scheduler import SchedulerProvider
-from parser.settings import ProjectSettings, ProjectSettingsProvider
 from parser.storage import StorageProvider
 from parser.telegram import TelegramProvider
 from uvicorn import Config, Server
@@ -33,7 +31,7 @@ async def build_app() -> FastAPI:
     container = make_async_container(
         APISettingsProvider(),
         PersistenceProvider(),
-        ProjectSettingsProvider(),
+        LoggingSettingsProvider(),
         StorageProvider(),
         TelegramProvider(),
         SchedulerProvider(),
@@ -41,13 +39,12 @@ async def build_app() -> FastAPI:
     )
 
     api_settings = await container.get(APISettings)
-    project_settings = await container.get(ProjectSettings)
+    logging_settings = await container.get(LoggingSettings)
 
-    setup_logging(project_settings, "api", version("api"))
+    setup_logging(logging_settings, "api", "api")
 
     app = FastAPI(
         title=api_settings.app_name,
-        version=version("api"),
         docs_url=api_settings.api_prefix + "/docs",
         redoc_url=api_settings.api_prefix + "/redoc",
         openapi_url=api_settings.api_prefix + "/openapi.json",

@@ -10,7 +10,6 @@ packages = [
     {include = "parser/logging",from = "../../components"},
     {include = "parser/storage",from = "../../components"},
     {include = "parser/dto",from = "../../components"},
-    {include = "parser/settings",from = "../../components"},
     {include = "parser/persistence",from = "../../components"},
     {include = "parser/message_broker",from = "../../components"},
     {include = "parser/telegram",from = "../../components"},

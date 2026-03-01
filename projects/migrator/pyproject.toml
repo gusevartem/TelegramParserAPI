@@ -7,7 +7,6 @@ license = ""
 
 packages = [
     {include = "parser/migrator",from = "../../bases"},
-    {include = "parser/settings",from = "../../components"},
     {include = "parser/persistence",from = "../../components"},
     {include = "parser/logging",from = "../../components"},
 ]
