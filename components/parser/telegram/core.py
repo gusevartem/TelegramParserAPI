@@ -3,7 +3,6 @@ from collections.abc import AsyncIterator
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from typing import Protocol, override
 
-import aio_pika
 import structlog
 from dishka import Provider, Scope, provide
 from dishka.dependency_source import CompositeDependencySource
@@ -21,8 +20,7 @@ from .exceptions import (
 )
 from .session_storage import (
     ITelegramSessionStorage,
-    RabbitMQSessionStorage,
-    SessionStorageChannel,
+    MySQLSessionStorage,
 )
 from .settings import TelegramSettings
 
@@ -149,22 +147,19 @@ class Telegram(ITelegram):
     @override
     @asynccontextmanager
     async def get_client(self, timeout: int = 5) -> AsyncIterator[ITelegramClient]:
-        with self.tracer.start_as_current_span("telegram.get_client") as span:
-            span.set_attribute("telegram.session_timeout_seconds", timeout)
-            logger = self.logger.bind(timeout=timeout)
+        logger = self.logger.bind(timeout=timeout)
 
+        try:
             async with self.telegram_client_dao_factory() as telegram_client_dao:
                 if not await telegram_client_dao.is_working_clients_exists():
-                    logger.error("no_working_clients_found")
-                    span.set_status(Status(StatusCode.ERROR, "No working clients"))
                     raise NoWorkingClientsFoundError(
                         "No working clients found in database"
                     )
 
-            try:
-                async with self.session_storage.get_session(
-                    timeout
-                ) as session_container:
+            async with self.session_storage.get_session(timeout) as session_container:
+                with self.tracer.start_as_current_span("telegram.check_client") as span:
+                    span.set_attribute("telegram.session_timeout_seconds", timeout)
+                    span.set_attribute("worker.id", self.settings.worker_id)
                     async with (
                         self.telegram_client_dao_factory() as telegram_client_dao
                     ):
@@ -208,8 +203,6 @@ class Telegram(ITelegram):
                             if client_info.proxy is not None
                             else None,
                         )
-
-                    async with client:
                         logger.info(
                             "client_acquired",
                             user_id=session_container.user_id,
@@ -223,15 +216,22 @@ class Telegram(ITelegram):
                             "telegram.phone", client_info.phone or "none"
                         )
 
-                        yield client
+                async with client:
+                    yield client
 
-                        logger.info(
-                            "client_usage_completed",
-                            user_id=session_container.user_id,
-                            phone=client_info.phone,
-                            stage="complete",
-                        )
-
+                # Успех
+                with self.tracer.start_as_current_span(
+                    "telegram.client_usage_completed"
+                ) as span:
+                    span.set_attribute("telegram.user_id", session_container.user_id)
+                    span.set_attribute("telegram.phone", client_info.phone)
+                    span.set_attribute("worker.id", self.settings.worker_id)
+                    self.logger.info(
+                        "client_usage_completed",
+                        user_id=session_container.user_id,
+                        phone=client_info.phone,
+                        stage="complete",
+                    )
                     session_container.session.set_dc(
                         client.current_session.dc_id,
                         client.current_session.server_address,
@@ -239,24 +239,36 @@ class Telegram(ITelegram):
                     )
                     session_container.session.auth_key = client.current_session.auth_key
 
-            except InvalidClient as e:
-                if e.user_id is not None:
-                    async with (
-                        self.telegram_client_dao_factory() as telegram_client_dao
-                    ):
-                        telegram_client = await telegram_client_dao.find_by_id(
-                            e.user_id
-                        )
-                        if telegram_client is not None:
-                            logger.info("banning_client", user_id=e.user_id)
+        except InvalidClient as e:
+            with self.tracer.start_as_current_span(
+                "telegram.handle_invalid_client_error"
+            ) as err_span:
+                if e.user_id is None:
+                    err_span.set_attribute("telegram.user_id", "unknown")
+                    self.logger.warning("invalid_client_error", exc_info=True)
+                    raise e
+                err_span.set_attribute("telegram.user_id", e.user_id)
+                err_span.set_attribute("worker.id", self.settings.worker_id)
 
-                            telegram_client.banned = True
-                            await telegram_client_dao.save(telegram_client)
-                            await telegram_client_dao.commit()
-
-                            logger.info("client_banned", user_id=e.user_id)
-                span.set_status(Status(StatusCode.ERROR, str(e)))
+                async with self.telegram_client_dao_factory() as telegram_client_dao:
+                    telegram_client = await telegram_client_dao.find_by_id(e.user_id)
+                    if telegram_client is not None:
+                        self.logger.info("banning_client", user_id=e.user_id)
+                        telegram_client.banned = True
+                        await telegram_client_dao.save(telegram_client)
+                        await telegram_client_dao.commit()
+                        self.logger.info("client_banned", user_id=e.user_id)
+                err_span.set_status(Status(StatusCode.ERROR, str(e)))
+                err_span.record_exception(e)
                 raise
+        except Exception as e:
+            with self.tracer.start_as_current_span(
+                "telegram.handle_invalid_client_error"
+            ) as err_span:
+                err_span.set_status(Status(StatusCode.ERROR, str(e)))
+                self.logger.error("invalid_client_error", exc_info=True)
+                err_span.record_exception(e)
+            raise
 
 
 class TelegramProvider(Provider):
@@ -264,25 +276,25 @@ class TelegramProvider(Provider):
     def settings(self) -> TelegramSettings:
         return TelegramSettings()  # type: ignore # pyright: ignore
 
-    @provide(scope=Scope.APP)
-    async def channel(
-        self, connection: aio_pika.abc.AbstractConnection
-    ) -> AsyncIterator[SessionStorageChannel]:
-        channel = await connection.channel(
-            publisher_confirms=True, on_return_raises=True
-        )
-        await channel.set_qos(prefetch_count=1)
+    # @provide(scope=Scope.APP)
+    # async def channel(
+    #     self, connection: aio_pika.abc.AbstractConnection
+    # ) -> AsyncIterator[SessionStorageChannel]:
+    #     channel = await connection.channel(
+    #         publisher_confirms=True, on_return_raises=True
+    #     )
+    #     await channel.set_qos(prefetch_count=1)
 
-        yield SessionStorageChannel(channel)
+    #     yield SessionStorageChannel(channel)
 
-        await channel.close()
+    #     await channel.close()
 
     @provide(scope=Scope.APP)
     def telegram_client_factory(self) -> ITelegramClientFactory:
         return TelegramClient
 
     session_storage: CompositeDependencySource = provide(
-        RabbitMQSessionStorage,
+        MySQLSessionStorage,
         scope=Scope.APP,
         provides=ITelegramSessionStorage,
     )

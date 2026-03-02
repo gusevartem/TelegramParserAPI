@@ -116,6 +116,7 @@ class TelegramClientDAO(BaseDAO[TelegramClient, int]):
             .where(TelegramClient.banned == False)  # noqa: E712
             .where(TelegramClient.session_string.is_not(None))
             .where((latest_locked_until.is_(None)) | (latest_locked_until <= now))
+            .with_for_update(skip_locked=True)
             .limit(1)
         )
 
