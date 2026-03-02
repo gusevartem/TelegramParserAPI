@@ -246,7 +246,7 @@ class Telegram(ITelegram):
                 if e.user_id is None:
                     err_span.set_attribute("telegram.user_id", "unknown")
                     self.logger.warning("invalid_client_error", exc_info=True)
-                    raise e
+                    raise
                 err_span.set_attribute("telegram.user_id", e.user_id)
                 err_span.set_attribute("worker.id", self.settings.worker_id)
 
