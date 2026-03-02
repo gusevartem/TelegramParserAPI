@@ -1,7 +1,8 @@
-from .core import AddTask, GetTasks, SchedulerProvider, calculate_next_run
+from .core import AddTask, ClaimTask, GetTasks, SchedulerProvider, calculate_next_run
 
 __all__ = [
     "AddTask",
+    "ClaimTask",
     "GetTasks",
     "SchedulerProvider",
     "calculate_next_run",

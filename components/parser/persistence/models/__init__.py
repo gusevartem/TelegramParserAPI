@@ -23,6 +23,11 @@ from .parsing_task import (
     ParsingTaskDAOFactory,
     ParsingTaskStatus,
 )
+from .task_claim_history import (
+    TaskClaimHistory,
+    TaskClaimHistoryDAO,
+    TaskClaimHistoryDAOFactory,
+)
 from .telegram_client import (
     ProxyType,
     TelegramClient,
@@ -63,6 +68,9 @@ __all__ = [
     "ParsingTaskDAOFactory",
     "ParsingTaskStatus",
     "MultipleDAOFactory",
+    "TaskClaimHistory",
+    "TaskClaimHistoryDAO",
+    "TaskClaimHistoryDAOFactory",
     "WorkerAccountUsage",
     "WorkerAccountUsageDAO",
     "WorkerAccountUsageDAOFactory",

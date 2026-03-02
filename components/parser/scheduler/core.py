@@ -10,6 +10,7 @@ from parser.persistence import (
 from parser.persistence import (
     ParsingTaskDAO,
     ParsingTaskStatus,
+    TaskClaimHistoryDAO,
 )
 from pydantic import HttpUrl, TypeAdapter
 from sqlalchemy.exc import IntegrityError
@@ -23,7 +24,7 @@ def calculate_next_run(
 ) -> datetime | None:
     if status not in (
         ParsingTaskStatus.IDLE,
-        ParsingTaskStatus.PROCESSING,
+        ParsingTaskStatus.SKIP,
     ):
         return None
 
@@ -63,7 +64,7 @@ class AddTask:
                     break
 
         if selected_bucket is None:
-            selected_bucket = min(buckets_loadings.items(), key=lambda x: x[1])[0]
+            selected_bucket = min(buckets_loadings.items(), key=lambda x: x[1])[0]  # pyright: ignore[reportIndexIssue]
 
         try:
             return await self._create_task_and_generate_dto(clean_url, selected_bucket)
@@ -98,19 +99,26 @@ class AddTask:
 
 
 class GetTasks:
-    def __init__(self, parsing_task_dao: ParsingTaskDAO):
+    def __init__(
+        self,
+        parsing_task_dao: ParsingTaskDAO,
+        task_claim_history_dao: TaskClaimHistoryDAO,
+    ):
         self.parsing_task_dao: ParsingTaskDAO = parsing_task_dao
+        self.task_claim_history_dao: TaskClaimHistoryDAO = task_claim_history_dao
 
     async def __call__(
-        self, set_processing: bool, tasks_limit: int
+        self, set_processing: bool, tasks_limit: int, worker_id: str = "scheduler"
     ) -> AsyncIterable[ParsingTaskDTO]:
         tasks_persistence = await self.parsing_task_dao.get_scheduled_tasks(
             limit=tasks_limit
         )
         for task in tasks_persistence:
             if set_processing:
-                task.status = ParsingTaskStatus.PROCESSING
-                await self.parsing_task_dao.save(task)
+                await self.task_claim_history_dao.create(
+                    task_id=task.id,
+                    worker_id=worker_id,
+                )
 
             next_run = calculate_next_run(
                 task.bucket,
@@ -125,6 +133,48 @@ class GetTasks:
         await self.parsing_task_dao.commit()
 
 
+class ClaimTask:
+    def __init__(
+        self,
+        parsing_task_dao: ParsingTaskDAO,
+        task_claim_history_dao: TaskClaimHistoryDAO,
+    ):
+        self.parsing_task_dao: ParsingTaskDAO = parsing_task_dao
+        self.task_claim_history_dao: TaskClaimHistoryDAO = task_claim_history_dao
+
+    async def __call__(self, worker_id: str) -> ParsingTaskDTO | None:
+        """Атомарно забирает одну задачу и записывает в историю.
+
+        Args:
+            worker_id: идентификатор воркера
+
+        Returns:
+            ParsingTaskDTO если задача найдена, иначе None
+        """
+        tasks = list(await self.parsing_task_dao.get_scheduled_tasks(limit=1))
+
+        if len(tasks) == 0:
+            return None
+
+        task = tasks[0]
+        await self.task_claim_history_dao.create(
+            task_id=task.id,
+            worker_id=worker_id,
+        )
+
+        next_run = calculate_next_run(
+            task.bucket,
+            task.last_parsed_at,
+            task.created_at,
+            task.status,
+        )
+        parsing_task_dto = ParsingTaskDTO.from_persistence(
+            task, int(next_run.timestamp()) if next_run else None
+        )
+        await self.parsing_task_dao.commit()
+        return parsing_task_dto
+
+
 class SchedulerProvider(Provider):
     add_task: CompositeDependencySource = provide(
         AddTask,
@@ -134,5 +184,10 @@ class SchedulerProvider(Provider):
     get_tasks: CompositeDependencySource = provide(
         GetTasks,
         provides=GetTasks,
+        scope=Scope.REQUEST,
+    )
+    claim_task: CompositeDependencySource = provide(
+        ClaimTask,
+        provides=ClaimTask,
         scope=Scope.REQUEST,
     )

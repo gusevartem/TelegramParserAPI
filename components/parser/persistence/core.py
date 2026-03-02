@@ -46,6 +46,7 @@ def register_model() -> list[type]:
         Media,
         MessageMediaLink,
         ParsingTask,
+        TaskClaimHistory,
         TelegramClient,
         TelegramClientProxy,
         WorkerAccountUsage,
@@ -62,6 +63,7 @@ def register_model() -> list[type]:
         TelegramClientProxy,
         ParsingTask,
         WorkerAccountUsage,
+        TaskClaimHistory,
     ]
 
 
