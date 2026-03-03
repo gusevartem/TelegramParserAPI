@@ -1,13 +1,32 @@
 import logging
 import sys
+from typing import ClassVar
 
 import structlog
+from dishka import Provider, Scope, provide
 from opentelemetry import trace
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
-from parser.settings import ProjectSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class LoggingSettings(BaseSettings):
+    model_config: ClassVar[SettingsConfigDict] = SettingsConfigDict(
+        frozen=True,
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=False,
+        extra="ignore",
+    )
+    trace_exporter_endpoint: str | None = None
+
+
+class LoggingSettingsProvider(Provider):
+    @provide(scope=Scope.APP)
+    def settings(self) -> LoggingSettings:
+        return LoggingSettings()
 
 
 def _otel_trace_processor(
@@ -48,14 +67,11 @@ def _otel_trace_processor(
     return event_dict
 
 
-def setup_logging(settings: ProjectSettings, service_name: str, service_version: str):
+def setup_logging(settings: LoggingSettings, service_name: str, service_id: str):
     resource = Resource.create(
         {
             "service.name": service_name,
-            "service.version": service_version,
-            "deployment.environment": "production"
-            if not settings.debug
-            else "development",
+            "service.id": service_id,
         }
     )
 

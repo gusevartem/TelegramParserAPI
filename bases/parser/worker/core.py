@@ -1,16 +1,15 @@
 import asyncio
-from importlib.metadata import version
 
 import structlog
 from dishka import Provider, Scope, make_async_container, provide
 from dishka.dependency_source import CompositeDependencySource
 from opentelemetry import trace
-from parser.logging import setup_logging
-from parser.message_broker import MessageBrokerProvider
+from parser.logging import LoggingSettings, LoggingSettingsProvider, setup_logging
 from parser.persistence import PersistenceProvider
-from parser.settings import ProjectSettings, ProjectSettingsProvider
+from parser.scheduler import SchedulerProvider
 from parser.storage import StorageProvider
 from parser.telegram import TelegramProvider
+from parser.telegram.settings import TelegramSettings
 
 from .settings import WorkerSettings
 from .worker import Worker
@@ -32,13 +31,14 @@ async def run_worker() -> None:
     container = make_async_container(
         WorkerProvider(),
         PersistenceProvider(),
-        ProjectSettingsProvider(),
+        LoggingSettingsProvider(),
         StorageProvider(),
         TelegramProvider(),
-        MessageBrokerProvider(),
+        SchedulerProvider(),
     )
-    project_settings = await container.get(ProjectSettings)
-    setup_logging(project_settings, "worker", version("worker"))
+    logging_settings = await container.get(LoggingSettings)
+    telegram_settings = await container.get(TelegramSettings)
+    setup_logging(logging_settings, "worker", telegram_settings.worker_id)
 
     logger: structlog.BoundLogger = structlog.get_logger("worker")
     tracer = trace.get_tracer("worker")
@@ -46,23 +46,15 @@ async def run_worker() -> None:
     try:
         worker = await container.get(Worker)
         while True:
-            with tracer.start_as_current_span("worker.iteration") as span:
-                try:
-                    logger.info("worker_loop_started")
-
-                    await worker.start()
-
-                    logger.info("worker_loop_completed")
-
-                except asyncio.CancelledError:
-                    logger.info("worker_loop_cancelled")
-                    break
-                except Exception as e:
+            try:
+                await worker.start()
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                with tracer.start_as_current_span("worker.iteration_failed") as span:
                     logger.error("worker_loop_failed", exc_info=True)
                     span.set_status(trace.Status(trace.StatusCode.ERROR, str(e)))
                     span.record_exception(e)
-
-            logger.info("sleeping", duration_seconds=60)
             await asyncio.sleep(60)
     finally:
         await container.close()

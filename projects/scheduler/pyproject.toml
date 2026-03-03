@@ -7,7 +7,6 @@ license = ""
 
 packages = [
     {include = "parser/scheduler_loop",from = "../../bases"},
-    {include = "parser/settings",from = "../../components"},
     {include = "parser/scheduler",from = "../../components"},
     {include = "parser/message_broker",from = "../../components"},
     {include = "parser/dto",from = "../../components"},

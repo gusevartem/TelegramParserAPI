@@ -1,3 +1,3 @@
-from parser.logging.core import setup_logging
+from .core import LoggingSettings, LoggingSettingsProvider, setup_logging
 
-__all__ = ["setup_logging"]
+__all__ = ["LoggingSettings", "LoggingSettingsProvider", "setup_logging"]

@@ -12,6 +12,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.types import TIMESTAMP
 
 from ._base import BaseDAO, BaseDAOFactory, BaseModel
+from .task_claim_history import TaskClaimHistory
 
 if TYPE_CHECKING:
     from .channel import Channel
@@ -19,7 +20,7 @@ if TYPE_CHECKING:
 
 class ParsingTaskStatus(StrEnum):
     IDLE = "idle"
-    PROCESSING = "processing"
+    SKIP = "skip"
     EXISTS = "exists"
     ERROR = "error"
 
@@ -79,9 +80,7 @@ class ParsingTaskDAO(BaseDAO[ParsingTask, UUID]):
         stmt = (
             select(ParsingTask.bucket, func.count(ParsingTask.id))
             .where(
-                ParsingTask.status.in_(
-                    [ParsingTaskStatus.IDLE, ParsingTaskStatus.PROCESSING]
-                )
+                ParsingTask.status.in_([ParsingTaskStatus.IDLE, ParsingTaskStatus.SKIP])
             )
             .group_by(ParsingTask.bucket)
         )
@@ -111,6 +110,13 @@ class ParsingTaskDAO(BaseDAO[ParsingTask, UUID]):
                 | (
                     (ParsingTask.last_parsed_at.is_(None))
                     & (ParsingTask.created_at < this_hour_start)
+                )
+            )
+            .where(
+                ParsingTask.id.not_in(
+                    select(TaskClaimHistory.task_id)
+                    .where(TaskClaimHistory.claimed_at >= this_hour_start)
+                    .scalar_subquery()
                 )
             )
             .order_by(ParsingTask.bucket.asc())

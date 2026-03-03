@@ -17,10 +17,19 @@ RUN python -m pip install --upgrade pip
 RUN useradd -m api
 USER api
 WORKDIR /home/api/app
+ENV PATH="/home/api/.local/bin:$PATH"
 
-# Install api dependencies
+# Install regular dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Install api project
 ARG wheel=api-0.1.0-py3-none-any.whl
 COPY --chown=api:api ./dist/$wheel .
 RUN pip install --no-cache-dir --upgrade --no-warn-script-location /home/api/app/$wheel
 
-CMD ["python", "-m", "parser.api"]
+COPY --chown=api:api entrypoint.sh .
+RUN chmod +x entrypoint.sh
+ENTRYPOINT ["/home/api/app/entrypoint.sh"]
+
+CMD ["api"]

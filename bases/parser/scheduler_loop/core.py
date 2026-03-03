@@ -1,14 +1,12 @@
 import asyncio
-from importlib.metadata import version
 
 import structlog
 from dishka import make_async_container
 from opentelemetry import trace
-from parser.logging import setup_logging
+from parser.logging import LoggingSettings, LoggingSettingsProvider, setup_logging
 from parser.message_broker import IMessageBroker, MessageBrokerProvider
 from parser.persistence import PersistenceProvider
 from parser.scheduler import GetTasks, SchedulerProvider
-from parser.settings import ProjectSettings, ProjectSettingsProvider
 
 
 async def run_scheduler() -> None:
@@ -16,10 +14,10 @@ async def run_scheduler() -> None:
         SchedulerProvider(),
         MessageBrokerProvider(),
         PersistenceProvider(),
-        ProjectSettingsProvider(),
+        LoggingSettingsProvider(),
     )
-    settings = await container.get(ProjectSettings)
-    setup_logging(settings, "scheduler", version("scheduler"))
+    settings = await container.get(LoggingSettings)
+    setup_logging(settings, "scheduler", "scheduler")
 
     message_broker = await container.get(IMessageBroker)
 

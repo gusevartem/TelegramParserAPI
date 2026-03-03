@@ -1,6 +1,8 @@
 from typing import ClassVar
+from uuid import uuid4
 
 from parser.dto import TelegramCredentials
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -12,6 +14,8 @@ class TelegramSettings(BaseSettings):
         case_sensitive=False,
         extra="ignore",
     )
+    worker_id: str = Field(default_factory=lambda: str(uuid4()))
+    account_lock_hours: int = 20
     save_telegram_responses: bool = False
 
     session_storage_queue_name: str = "telegram.session_storage.queue"

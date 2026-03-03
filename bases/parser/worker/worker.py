@@ -10,7 +10,6 @@ import structlog
 from opentelemetry import trace
 from opentelemetry.trace import Span, Status, StatusCode
 from parser.dto import ParsingTask
-from parser.message_broker import IMessageBroker, InvalidMessageError, InvalidTask
 from parser.persistence import (
     ChannelDAO,
     ChannelMessageDAO,
@@ -21,7 +20,9 @@ from parser.persistence import (
     MultipleDAOFactory,
     ParsingTaskDAO,
     ParsingTaskStatus,
+    TaskClaimHistoryDAO,
 )
+from parser.scheduler import ClaimTask
 from parser.storage import IStorage
 from parser.telegram import (
     FloodWait,
@@ -31,6 +32,7 @@ from parser.telegram import (
     NoWorkingClientsFoundError,
     TelegramException,
 )
+from parser.telegram.settings import TelegramSettings
 from pydantic import HttpUrl, TypeAdapter
 from telethon import errors, functions, types
 from telethon.tl.types import Channel
@@ -52,16 +54,16 @@ class Worker:
     def __init__(
         self,
         telegram: ITelegram,
-        message_broker: IMessageBroker,
         storage: IStorage,
         dao_factory: MultipleDAOFactory,
         settings: WorkerSettings,
+        telegram_settings: TelegramSettings,
     ):
         self._telegram: ITelegram = telegram
-        self._message_broker: IMessageBroker = message_broker
         self._storage: IStorage = storage
         self._dao_factory: MultipleDAOFactory = dao_factory
         self.settings: WorkerSettings = settings
+        self.telegram_settings: TelegramSettings = telegram_settings
 
         self.logger: structlog.BoundLogger = structlog.get_logger()
         self.tracer: trace.Tracer = trace.get_tracer("worker")
@@ -70,176 +72,105 @@ class Worker:
         try:
             async with self._telegram.get_client() as client:
                 start_time = time.time()
-                max_session_duration = 20 * 60 * 60  # 20 hours
+                max_session_duration = (
+                    60 * 60 * (self.telegram_settings.account_lock_hours - 0.5)
+                )
                 while True:
                     if time.time() - start_time > max_session_duration:
-                        self.logger.info("session_ttl_expired_releasing")
                         break
-                    with self.tracer.start_as_current_span("worker.wait_task") as span:
-                        wait_timeout = 600
-                        span.set_attribute("wait_timeout", wait_timeout)
-                        logger = self.logger.bind(wait_timeout=wait_timeout)
-                        logger.info("waiting_for_task")
+                    with self.tracer.start_as_current_span(
+                        "worker.process_task"
+                    ) as span:
                         try:
-                            async with self._message_broker.get_task(
-                                wait_timeout
-                            ) as task:
-                                with self.tracer.start_as_current_span(
-                                    "worker.process_task"
-                                ) as task_span:
-                                    task_span.set_attribute("task.id", str(task.id))
-                                    task_span.set_attribute("task.url", task.url)
-                                    task_span.set_attribute(
-                                        "task.channel_id", task.channel_id or "none"
-                                    )
-                                    task_span.set_attribute(
-                                        "task.next_run_at",
-                                        task.next_run_at or "none",
-                                    )
-                                    task_span.set_attribute(
-                                        "task.last_parsed_at",
-                                        task.last_parsed_at or "none",
-                                    )
-                                    task_span.set_attribute(
-                                        "task.created_at",
-                                        task.created_at,
-                                    )
-                                    task_logger = logger.bind(
-                                        task_id=str(task.id),
-                                        task_url=task.url,
-                                        channel_id=task.channel_id or "none",
-                                        next_run_at=task.next_run_at or "none",
-                                        last_parsed_at=task.last_parsed_at or "none",
-                                        created_at=task.created_at,
-                                    )
-                                    task_logger.info("processing_task", stage="start")
-                                    task_logger.info("finding_task")
-                                    async with self._dao_factory() as dao_factory:
-                                        parsing_task_dao = dao_factory(ParsingTaskDAO)
-                                        persistence_task = (
-                                            await parsing_task_dao.find_by_id(task.id)
-                                        )
-                                        if persistence_task is None:
-                                            task_logger.warning(
-                                                "task_not_found_in_database"
-                                            )
-                                            task_span.set_status(
-                                                Status(
-                                                    StatusCode.ERROR,
-                                                    "Task not found in database",
-                                                )
-                                            )
-                                            raise InvalidTask(
-                                                "Task not found in database"
-                                            )
+                            async with self._dao_factory() as dao_factory:
+                                claim_task = ClaimTask(
+                                    dao_factory(ParsingTaskDAO),
+                                    dao_factory(TaskClaimHistoryDAO),
+                                )
+                                task = await claim_task(
+                                    self.telegram_settings.worker_id
+                                )
+                            if task is None:
+                                self.logger.info("no_tasks_found")
+                                await asyncio.sleep(tasks_timeout_sleep)
+                                continue
 
-                                        task_span.set_attribute(
-                                            "task.status",
-                                            str(persistence_task.status),
-                                        )
-
-                                        if persistence_task.status in (
-                                            ParsingTaskStatus.ERROR,
-                                            ParsingTaskStatus.EXISTS,
-                                        ):
-                                            task_logger.warning(
-                                                "unexpected_task_status",
-                                                current_task_status=str(
-                                                    persistence_task.status
-                                                ),
-                                                expected_task_status=str(
-                                                    ParsingTaskStatus.PROCESSING
-                                                ),
-                                                next_action="raise_exception",
-                                            )
-                                            task_span.set_status(
-                                                Status(
-                                                    StatusCode.ERROR,
-                                                    "Unexpected task status",
-                                                )
-                                            )
-                                            raise InvalidTask(
-                                                "Expect status "
-                                                + f"{ParsingTaskStatus.PROCESSING}, "
-                                                + f"got {persistence_task.status}"
-                                            )
-
-                                        if (
-                                            persistence_task.status
-                                            == ParsingTaskStatus.IDLE
-                                        ):
-                                            task_logger.warning(
-                                                "unexpected_task_status",
-                                                current_task_status=str(
-                                                    persistence_task.status
-                                                ),
-                                                expected_task_status=str(
-                                                    ParsingTaskStatus.PROCESSING
-                                                ),
-                                                next_action="update_status",
-                                            )
-                                            persistence_task.status = (
-                                                ParsingTaskStatus.PROCESSING
-                                            )
-                                            await parsing_task_dao.save(
-                                                persistence_task
-                                            )
-                                            await parsing_task_dao.commit()
-
-                                    task_logger.info("task_found_in_database")
-
-                                    async with self._handle_task_processing_errors(
-                                        task, task_logger, task_span
-                                    ):
-                                        await self._process_task(
-                                            client, task, task_logger, task_span
-                                        )
-
-                                    task_logger.info("task_processed", stage="complete")
-
-                                    async with self._dao_factory() as dao_factory:
-                                        task_logger.info("updating_task_status")
-
-                                        parsing_task_dao = dao_factory(ParsingTaskDAO)
-                                        persistence_task = (
-                                            await parsing_task_dao.find_by_id(task.id)
-                                        )
-                                        if (
-                                            persistence_task is not None
-                                            and persistence_task.status
-                                            == ParsingTaskStatus.PROCESSING
-                                        ):
-                                            persistence_task.status = (
-                                                ParsingTaskStatus.IDLE
-                                            )
-                                            persistence_task.last_parsed_at = (
-                                                datetime.now(timezone.utc)
-                                            )
-                                            await parsing_task_dao.save(
-                                                persistence_task
-                                            )
-                                            await parsing_task_dao.commit()
-
-                                        task_logger.info("task_updated")
-
-                        except InvalidMessageError:
-                            logger.error("invalid_message", action="ignore")
-                            continue
-                        except InvalidTask:
-                            logger.error("invalid_task", action="ignore")
-                            continue
-                        except TimeoutError:
-                            logger.error(
-                                "timeout_error",
-                                action="sleep",
-                                sleep_seconds=tasks_timeout_sleep,
+                            span.set_attribute("task.id", str(task.id))
+                            span.set_attribute("task.url", task.url)
+                            span.set_attribute(
+                                "task.channel_id", task.channel_id or "none"
                             )
-                            await asyncio.sleep(tasks_timeout_sleep)
-                            continue
+                            span.set_attribute(
+                                "task.next_run_at",
+                                task.next_run_at or "none",
+                            )
+                            span.set_attribute(
+                                "task.last_parsed_at",
+                                task.last_parsed_at or "none",
+                            )
+                            span.set_attribute(
+                                "task.created_at",
+                                task.created_at,
+                            )
+                            task_logger = self.logger.bind(
+                                task_id=str(task.id),
+                                task_url=task.url,
+                                channel_id=task.channel_id or "none",
+                                next_run_at=task.next_run_at or "none",
+                                last_parsed_at=task.last_parsed_at or "none",
+                                created_at=task.created_at,
+                            )
+                            task_logger.info("processing_task", stage="start")
+                            task_logger.info("finding_task")
+                            async with self._dao_factory() as dao_factory:
+                                parsing_task_dao = dao_factory(ParsingTaskDAO)
+                                persistence_task = await parsing_task_dao.find_by_id(
+                                    task.id
+                                )
+                                if persistence_task is None:
+                                    task_logger.warning("task_not_found_in_database")
+                                    span.set_status(
+                                        Status(
+                                            StatusCode.ERROR,
+                                            "Task not found in database",
+                                        )
+                                    )
+                                    continue
+                                span.set_attribute(
+                                    "task.status",
+                                    str(persistence_task.status),
+                                )
+
+                                if persistence_task.status != ParsingTaskStatus.IDLE:
+                                    task_logger.warning(
+                                        "unexpected_task_status",
+                                        current_task_status=str(
+                                            persistence_task.status
+                                        ),
+                                        expected_task_status=str(
+                                            ParsingTaskStatus.IDLE
+                                        ),
+                                        next_action="raise_exception",
+                                    )
+                                    span.set_status(
+                                        Status(
+                                            StatusCode.ERROR,
+                                            "Unexpected task status",
+                                        )
+                                    )
+                                    continue
+                                task_logger.info("task_found_in_database")
+                            async with self._handle_task_processing_errors(
+                                task, task_logger, span
+                            ):
+                                await self._process_task(
+                                    client, task, task_logger, span
+                                )
+                            task_logger.info("task_processed", stage="complete")
                         except TelegramException:
                             raise
                         except Exception as e:
-                            logger.critical("unknown_error", exc_info=True)
+                            self.logger.critical("unknown_error", exc_info=True)
                             span.set_status(Status(StatusCode.ERROR, str(e)))
                             span.record_exception(e)
                             continue
@@ -250,7 +181,7 @@ class Worker:
             TimeoutError,
             FloodWait,
         ):
-            self.logger.warning("client_exception_occurred", exc_info=True)
+            pass
 
     @asynccontextmanager
     async def _handle_task_processing_errors(
@@ -258,7 +189,6 @@ class Worker:
     ):
         async def change_task_status(
             new_status: ParsingTaskStatus,
-            exception: Exception,
             channel_id: int | None = None,
         ):
             async with self._dao_factory() as dao_factory:
@@ -269,9 +199,7 @@ class Worker:
                     task_span.set_status(
                         Status(StatusCode.ERROR, "Task was deleted while processing")
                     )
-                    raise InvalidTask(
-                        "Task was deleted while processing"
-                    ) from exception
+                    return
 
                 persistence_task.status = new_status
                 persistence_task.channel_id = channel_id
@@ -283,22 +211,24 @@ class Worker:
         try:
             yield
         except TaskExists as e:
-            await change_task_status(ParsingTaskStatus.EXISTS, e, e.channel_id)
+            await change_task_status(ParsingTaskStatus.EXISTS, e.channel_id)
             task_logger.warning("channel_already_exists", action="mark_as_exists")
-            raise InvalidTask("Task already exists") from e
 
         except TaskError as e:
-            await change_task_status(ParsingTaskStatus.ERROR, e)
+            await change_task_status(ParsingTaskStatus.ERROR)
             task_span.set_status(Status(StatusCode.ERROR, str(e)))
             task_span.record_exception(e)
             task_logger.error("task_error", action="mark_as_error", exc_info=True)
-            raise InvalidTask("Task error") from e
 
         except TemporaryCannotProcessTask as e:
-            await change_task_status(ParsingTaskStatus.IDLE, e)
+            await change_task_status(ParsingTaskStatus.IDLE)
             task_logger.warning(
                 "temporary_cannot_process_task", action="mark_as_idle", exc_info=True
             )
+            task_span.set_status(
+                Status(StatusCode.ERROR, "Temporary cannot process task")
+            )
+            task_span.record_exception(e)
 
     async def _process_task(
         self,
@@ -324,11 +254,7 @@ class Worker:
                     task_with_same_channel.channel_id is not None
                     and task_with_same_channel.channel_id == channel_entity.id
                     and task_with_same_channel.id != task.id
-                    and task_with_same_channel.status
-                    in (
-                        ParsingTaskStatus.PROCESSING,
-                        ParsingTaskStatus.IDLE,
-                    )
+                    and task_with_same_channel.status == ParsingTaskStatus.IDLE
                 ):
                     task_logger.error("task_exists")
                     task_span.set_status(Status(StatusCode.ERROR, "Task exists"))
@@ -435,7 +361,7 @@ class Worker:
                 task_span.set_status(
                     Status(StatusCode.ERROR, "Task was deleted while processing")
                 )
-                raise InvalidTask("Task was deleted while processing")
+                raise TaskError("Task was deleted while processing")
 
             persistence_parsing_task.channel_id = channel_entity.id
             await parsing_task_dao.save(persistence_parsing_task)

@@ -1,8 +1,6 @@
 x-depends_on: &additional_services_healthy
   mysql:
     condition: service_healthy
-  rabbitmq:
-    condition: service_healthy
   minio:
     condition: service_healthy
   jaeger:
@@ -41,25 +39,6 @@ services:
     ports:
       - "127.0.0.1:3306:8080"
 
-  rabbitmq:
-    image: heidiks/rabbitmq-delayed-message-exchange:4.2.0-management
-    hostname: telegram-rabbit
-    restart: always
-    ports:
-      - "127.0.0.1:15672:15672"
-    environment:
-      - RABBITMQ_DEFAULT_USER=${RABBITMQ_LOGIN}
-      - RABBITMQ_DEFAULT_PASS=${RABBITMQ_PASSWORD}
-    volumes:
-      - rabbitmq-data:/var/lib/rabbitmq
-      - ./rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
-    healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
-
   minio:
     image: minio/minio:RELEASE.2025-09-07T16-13-09Z
     restart: always
@@ -88,8 +67,6 @@ services:
       - transport.host=127.0.0.1
       - OPENSEARCH_INITIAL_ADMIN_PASSWORD=${OPENSEARCH_INITIAL_ADMIN_PASSWORD}
       - "OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m"
-    ports:
-      - "127.0.0.1:9200:9200"
     volumes:
       - opensearch-data:/usr/share/opensearch/data
     healthcheck:
@@ -156,11 +133,6 @@ services:
       - S3_ENDPOINT_URL=http://minio:9000
       - S3_PUBLIC_URL=${MINIO_SERVER_URL}
 
-      - RABBITMQ_HOST=rabbitmq
-      - RABBITMQ_PORT=5672
-      - RABBITMQ_LOGIN=${RABBITMQ_LOGIN}
-      - RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD}
-
       - SAVE_TELEGRAM_RESPONSES=${SAVE_TELEGRAM_RESPONSES}
 
       - DEFAULT_API_ID=${DEFAULT_API_ID}
@@ -170,31 +142,6 @@ services:
       - DEFAULT_APP_VERSION=${DEFAULT_APP_VERSION}
       - DEFAULT_LANG_CODE=${DEFAULT_LANG_CODE}
       - DEFAULT_SYSTEM_LANG_CODE=${DEFAULT_SYSTEM_LANG_CODE}
-
-      - TRACE_EXPORTER_ENDPOINT=http://jaeger:4318/v1/traces
-    depends_on:
-      <<: *additional_services_healthy
-      migrator:
-        condition: service_started
-
-  scheduler:
-    build:
-      context: projects/scheduler
-      dockerfile: Dockerfile
-    restart: always
-    environment:
-      - DEBUG=false
-
-      - MYSQL_USER=${MYSQL_USER}
-      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
-      - MYSQL_DATABASE=${MYSQL_DATABASE}
-      - MYSQL_HOST=mysql
-      - MYSQL_PORT=3306
-
-      - RABBITMQ_HOST=rabbitmq
-      - RABBITMQ_PORT=5672
-      - RABBITMQ_LOGIN=${RABBITMQ_LOGIN}
-      - RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD}
 
       - TRACE_EXPORTER_ENDPOINT=http://jaeger:4318/v1/traces
     depends_on:
@@ -221,11 +168,6 @@ services:
       - S3_BUCKET_NAME=${S3_BUCKET_NAME}
       - S3_REGION_NAME=us-east-1
       - S3_ENDPOINT_URL=http://minio:9000
-
-      - RABBITMQ_HOST=rabbitmq
-      - RABBITMQ_PORT=5672
-      - RABBITMQ_LOGIN=${RABBITMQ_LOGIN}
-      - RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD}
 
       - SAVE_TELEGRAM_RESPONSES=${SAVE_TELEGRAM_RESPONSES}
 

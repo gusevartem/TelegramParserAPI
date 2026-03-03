@@ -22,10 +22,16 @@ from .models import (
     ParsingTaskDAOFactory,
     ParsingTaskStatus,
     ProxyType,
+    TaskClaimHistory,
+    TaskClaimHistoryDAO,
+    TaskClaimHistoryDAOFactory,
     TelegramClient,
     TelegramClientDAO,
     TelegramClientDAOFactory,
     TelegramClientProxy,
+    WorkerAccountUsage,
+    WorkerAccountUsageDAO,
+    WorkerAccountUsageDAOFactory,
 )
 
 __all__ = [
@@ -57,4 +63,10 @@ __all__ = [
     "PersistenceProvider",
     "register_model",
     "MultipleDAOFactory",
+    "TaskClaimHistory",
+    "TaskClaimHistoryDAO",
+    "TaskClaimHistoryDAOFactory",
+    "WorkerAccountUsage",
+    "WorkerAccountUsageDAO",
+    "WorkerAccountUsageDAOFactory",
 ]

@@ -17,10 +17,15 @@ RUN python -m pip install --upgrade pip
 RUN useradd -m migrator
 USER migrator
 WORKDIR /home/migrator/app
+ENV PATH="/home/migrator/.local/bin:$PATH"
 
-# Install migrator dependencies
+# Install regular dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Install migrator project
 ARG wheel=migrator-0.1.0-py3-none-any.whl
 COPY --chown=migrator:migrator ./dist/$wheel .
 RUN pip install --no-cache-dir --upgrade --no-warn-script-location /home/migrator/app/$wheel
 
-CMD ["python", "-m", "parser.migrator", "upgrade", "head"]
+CMD ["alembic", "upgrade", "head"]
