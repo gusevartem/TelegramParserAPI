@@ -47,6 +47,7 @@ def _telethon_exception_handler():
         errors.UserDeactivatedBanError,
         errors.PeerFloodError,
         errors.UserRestrictedError,
+        errors.FrozenMethodInvalidError,
     ) as e:
         raise ClientBanned(f"Client banned or invalid: {str(e)}") from e
     except (ConnectionError, ConnectionResetError, OSError) as e:
