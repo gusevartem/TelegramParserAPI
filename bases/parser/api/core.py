@@ -9,7 +9,6 @@ from opentelemetry import trace
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from opentelemetry.trace import Status, StatusCode
 from parser.logging import LoggingSettings, LoggingSettingsProvider, setup_logging
-from parser.message_broker import MessageBrokerProvider
 from parser.persistence import PersistenceProvider
 from parser.scheduler import SchedulerProvider
 from parser.storage import StorageProvider
@@ -35,7 +34,6 @@ async def build_app() -> FastAPI:
         StorageProvider(),
         TelegramProvider(),
         SchedulerProvider(),
-        MessageBrokerProvider(),
     )
 
     api_settings = await container.get(APISettings)

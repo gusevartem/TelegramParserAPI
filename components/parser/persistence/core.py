@@ -27,6 +27,8 @@ from .models import (
     MultipleDAOFactory,
     ParsingTaskDAO,
     ParsingTaskDAOFactory,
+    TaskClaimHistoryDAO,
+    TaskClaimHistoryDAOFactory,
     TelegramClientDAO,
     TelegramClientDAOFactory,
     WorkerAccountUsageDAO,
@@ -141,6 +143,7 @@ class PersistenceProvider(Provider):
         TelegramClientDAO,
         ParsingTaskDAO,
         WorkerAccountUsageDAO,
+        TaskClaimHistoryDAO,
         scope=Scope.REQUEST,
     )
 
@@ -153,6 +156,7 @@ class PersistenceProvider(Provider):
         TelegramClientDAOFactory,
         ParsingTaskDAOFactory,
         WorkerAccountUsageDAOFactory,
+        TaskClaimHistoryDAOFactory,
         scope=Scope.APP,
     )
 

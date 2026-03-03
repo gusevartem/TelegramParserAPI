@@ -135,7 +135,7 @@ class TestParsingTaskQueries:
         await parsing_task_dao.create(url="url1", bucket=5)
 
         t2 = await parsing_task_dao.create(url="url2", bucket=5)
-        t2.status = ParsingTaskStatus.PROCESSING
+        t2.status = ParsingTaskStatus.SKIP
 
         t3 = await parsing_task_dao.create(url="url3", bucket=5)
         t3.status = ParsingTaskStatus.ERROR
@@ -174,15 +174,13 @@ class TestParsingTaskQueries:
         t2.last_parsed_at = this_hour_start - timedelta(hours=2)
         await parsing_task_dao.commit()
 
-        # Task 3: Status is Processing -> SHOULD NOT BE SCHEDULED
         t3 = await parsing_task_dao.create(
             url="task3_not_scheduled", bucket=test_bucket
         )
-        t3.status = ParsingTaskStatus.PROCESSING
+        t3.status = ParsingTaskStatus.SKIP
         t3.created_at = this_hour_start - timedelta(hours=1)
         await parsing_task_dao.commit()
 
-        # Task 4: created this hour -> SHOULD NOT BE SCHEDULED
         await parsing_task_dao.create(url="task4_not_scheduled", bucket=test_bucket)
         # created_at is automatically roughly now
         await parsing_task_dao.commit()

@@ -17,10 +17,19 @@ RUN python -m pip install --upgrade pip
 RUN useradd -m worker
 USER worker
 WORKDIR /home/worker/app
+ENV PATH="/home/worker/.local/bin:$PATH"
 
-# Install worker dependencies
+# Install regular dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Install worker project
 ARG wheel=worker-0.1.0-py3-none-any.whl
 COPY --chown=worker:worker ./dist/$wheel .
 RUN pip install --no-cache-dir --upgrade --no-warn-script-location /home/worker/app/$wheel
 
-CMD ["python", "-m", "parser.worker"]
+COPY --chown=worker:worker entrypoint.sh .
+RUN chmod +x entrypoint.sh
+ENTRYPOINT ["/home/worker/app/entrypoint.sh"]
+
+CMD ["worker"]

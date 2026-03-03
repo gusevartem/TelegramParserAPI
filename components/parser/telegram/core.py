@@ -150,11 +150,18 @@ class Telegram(ITelegram):
         logger = self.logger.bind(timeout=timeout)
 
         try:
-            async with self.telegram_client_dao_factory() as telegram_client_dao:
-                if not await telegram_client_dao.is_working_clients_exists():
-                    raise NoWorkingClientsFoundError(
-                        "No working clients found in database"
-                    )
+            working_clients_exists = True
+            with self.tracer.start_as_current_span("telegram.check_clients") as span:
+                span.set_attribute("worker.id", self.settings.worker_id)
+                async with self.telegram_client_dao_factory() as telegram_client_dao:
+                    if not await telegram_client_dao.is_working_clients_exists():
+                        working_clients_exists = False
+                        span.set_attribute("working_clients_exists", False)
+                    else:
+                        span.set_attribute("working_clients_exists", True)
+
+            if not working_clients_exists:
+                raise NoWorkingClientsFoundError("No working clients found in database")
 
             async with self.session_storage.get_session(timeout) as session_container:
                 with self.tracer.start_as_current_span("telegram.check_client") as span:
@@ -238,7 +245,8 @@ class Telegram(ITelegram):
                         client.current_session.port,
                     )
                     session_container.session.auth_key = client.current_session.auth_key
-
+        except NoWorkingClientsFoundError:
+            raise
         except InvalidClient as e:
             with self.tracer.start_as_current_span(
                 "telegram.handle_invalid_client_error"
