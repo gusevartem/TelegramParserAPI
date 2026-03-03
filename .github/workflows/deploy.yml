@@ -6,7 +6,43 @@ on:
       - main
 
 jobs:
-  copy:
+  test_project:
+    runs-on: ubuntu-latest
+    environment: staging
+    env:
+      DEFAULT_API_ID: ${{ secrets.DEFAULT_API_ID }}
+      DEFAULT_API_HASH: ${{ secrets.DEFAULT_API_HASH }}
+      DEFAULT_DEVICE_MODEL: ${{ vars.DEFAULT_DEVICE_MODEL }}
+      DEFAULT_SYSTEM_VERSION: ${{ vars.DEFAULT_SYSTEM_VERSION }}
+      DEFAULT_APP_VERSION: ${{ vars.DEFAULT_APP_VERSION }}
+      DEFAULT_LANG_CODE: ${{ vars.DEFAULT_LANG_CODE }}
+      DEFAULT_SYSTEM_LANG_CODE: ${{ vars.DEFAULT_SYSTEM_LANG_CODE }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install Poetry
+        uses: snok/install-poetry@v1
+        with:
+          version: "2.3.1"
+
+      - name: Install Poetry plugins and dependencies
+        run: |
+          poetry self add poetry-multiproject-plugin
+          poetry self add poetry-polylith-plugin
+          poetry self add poetry-plugin-export
+          poetry install
+
+      - name: Run tests with pytest
+        run: |
+          poetry run pytest
+
+  build_wheels:
     runs-on: ubuntu-latest
     environment: staging
     steps:
@@ -27,27 +63,29 @@ jobs:
         run: |
           poetry self add poetry-multiproject-plugin
           poetry self add poetry-polylith-plugin
+          poetry self add poetry-plugin-export
           poetry install
 
       - name: Create api project wheel
         working-directory: projects/api
         run: |
+          poetry install
           poetry build-project
+          poetry export -f requirements.txt --output requirements.txt --without-hashes
 
       - name: Create migrator project wheel
         working-directory: projects/migrator
         run: |
+          poetry install
           poetry build-project
-
-      - name: Create scheduler project wheel
-        working-directory: projects/scheduler
-        run: |
-          poetry build-project
+          poetry export -f requirements.txt --output requirements.txt --without-hashes
 
       - name: Create worker project wheel
         working-directory: projects/worker
         run: |
+          poetry install
           poetry build-project
+          poetry export -f requirements.txt --output requirements.txt --without-hashes
 
       - name: Archive code for deploy
         run: |
@@ -94,10 +132,10 @@ jobs:
           source: "deploy.zip,.env"
           target: "/home/${{ secrets.SERVER_USER }}/TelegramParserAPI/"
 
-  build:
+  deploy_container:
     runs-on: ubuntu-latest
     environment: staging
-    needs: copy
+    needs: [build_wheels, test_project]
     steps:
       - name: Deploy
         uses: appleboy/ssh-action@v1
