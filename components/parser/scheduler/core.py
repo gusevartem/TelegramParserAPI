@@ -155,8 +155,9 @@ class ClaimTask:
 
         if len(tasks) == 0:
             return None
-
+        now = datetime.now(timezone.utc)
         task = tasks[0]
+        task.last_parsed_at = now
         await self.task_claim_history_dao.create(
             task_id=task.id,
             worker_id=worker_id,
