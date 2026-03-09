@@ -1,4 +1,5 @@
 import asyncio
+import random
 import time
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
@@ -345,11 +346,34 @@ class Worker:
                 if message.created_at > stat_time_limit
             ]
 
+            hours_limit_messages_views: dict[int, list[int]] = {
+                hour_limit: [
+                    message.views
+                    for message in collected_messages
+                    if message.created_at > now_utc - timedelta(hours=hour_limit)
+                ]
+                for hour_limit in (24, 48, 72, 96, 120, 144, 168)
+            }
+
             await channel_statistic_dao.create(
                 channel=persistence_channel,
                 subscribers_count=full_channel.full_chat.participants_count or 0,  # pyright: ignore[reportAttributeAccessIssue]
                 views=sum(message.views for message in messages_stat),
                 posts_count=len(messages_stat),
+                views_24h=random.choice(hours_limit_messages_views[24]),
+                views_48h=random.choice(hours_limit_messages_views[48]),
+                views_72h=random.choice(hours_limit_messages_views[72]),
+                views_96h=random.choice(hours_limit_messages_views[96]),
+                views_120h=random.choice(hours_limit_messages_views[120]),
+                views_144h=random.choice(hours_limit_messages_views[144]),
+                views_168h=random.choice(hours_limit_messages_views[168]),
+                posts_count_24h=len(hours_limit_messages_views[24]),
+                posts_count_48h=len(hours_limit_messages_views[48]),
+                posts_count_72h=len(hours_limit_messages_views[72]),
+                posts_count_96h=len(hours_limit_messages_views[96]),
+                posts_count_120h=len(hours_limit_messages_views[120]),
+                posts_count_144h=len(hours_limit_messages_views[144]),
+                posts_count_168h=len(hours_limit_messages_views[168]),
             )
 
             task_logger.info("channel_statistic_saved_to_database")
@@ -576,13 +600,35 @@ class Worker:
                             )
                         )
                     return entity
-                except ValueError as e:
-                    logger.error(
-                        "cannot_resolve_username", username=username, exc_info=True
+                except (ValueError, errors.UsernameNotOccupiedError) as original_error:
+                    logger.info("verifying_shadow_ban", target_username=username)
+                    try:
+                        await client.get_entity("telegram")
+                    except Exception as shadow_ban_error:
+                        logger.error("shadow_ban_detected", exc_info=True)
+                        span.set_status(
+                            Status(StatusCode.ERROR, "Account shadow banned")
+                        )
+                        span.record_exception(shadow_ban_error)
+                        raise FloodWait(
+                            60 * 60 * 24,
+                            "Account is shadow banned or restricted: "
+                            + "cannot resolve known entities.",
+                        ) from shadow_ban_error
+
+                    error_msg = (
+                        f"Cannot resolve username: {username}"
+                        if isinstance(original_error, ValueError)
+                        else f"Username not found: {username}"
                     )
-                    span.set_status(Status(StatusCode.ERROR, "Cannot resolve username"))
-                    span.record_exception(e)
-                    raise TaskError(f"Cannot resolve username: {username}")
+                    logger.error(
+                        "cannot_resolve_target_username",
+                        username=username,
+                        exc_info=True,
+                    )
+                    span.set_status(Status(StatusCode.ERROR, error_msg))
+                    span.record_exception(original_error)
+                    raise TaskError(error_msg) from original_error
                 except errors.UsernameInvalidError as e:
                     logger.error(
                         "invalid_username_format", username=username, exc_info=True
@@ -590,11 +636,6 @@ class Worker:
                     span.set_status(Status(StatusCode.ERROR, "Invalid username format"))
                     span.record_exception(e)
                     raise TaskError(f"Invalid username format: {username}")
-                except errors.UsernameNotOccupiedError as e:
-                    logger.error("username_not_found", username=username, exc_info=True)
-                    span.set_status(Status(StatusCode.ERROR, "Username not found"))
-                    span.record_exception(e)
-                    raise TaskError(f"Username not found: {username}")
 
     async def _collect_messages(
         self, client: ITelegramClient, channel: Channel

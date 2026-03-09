@@ -53,6 +53,20 @@ class ChannelStatistic(BaseModel):
     subscribers_count: int
     views: int
     posts_count: int
+    views_24h: int
+    views_48h: int
+    views_72h: int
+    views_96h: int
+    views_120h: int
+    views_144h: int
+    views_168h: int
+    posts_count_24h: int
+    posts_count_48h: int
+    posts_count_72h: int
+    posts_count_96h: int
+    posts_count_120h: int
+    posts_count_144h: int
+    posts_count_168h: int
     recorded_at: int
 
     @staticmethod
@@ -61,6 +75,20 @@ class ChannelStatistic(BaseModel):
             subscribers_count=statistic.subscribers_count,
             views=statistic.views,
             posts_count=statistic.posts_count,
+            views_24h=statistic.views_24h,
+            views_48h=statistic.views_48h,
+            views_72h=statistic.views_72h,
+            views_96h=statistic.views_96h,
+            views_120h=statistic.views_120h,
+            views_144h=statistic.views_144h,
+            views_168h=statistic.views_168h,
+            posts_count_24h=statistic.posts_count_24h,
+            posts_count_48h=statistic.posts_count_48h,
+            posts_count_72h=statistic.posts_count_72h,
+            posts_count_96h=statistic.posts_count_96h,
+            posts_count_120h=statistic.posts_count_120h,
+            posts_count_144h=statistic.posts_count_144h,
+            posts_count_168h=statistic.posts_count_168h,
             recorded_at=int(statistic.recorded_at.timestamp()),
         )
 

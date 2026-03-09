@@ -26,6 +26,21 @@ class ChannelStatistic(BaseModel):
     subscribers_count: Mapped[int] = mapped_column()
     views: Mapped[int] = mapped_column()
     posts_count: Mapped[int] = mapped_column()
+    views_24h: Mapped[int] = mapped_column()
+    views_48h: Mapped[int] = mapped_column()
+    views_72h: Mapped[int] = mapped_column()
+    views_96h: Mapped[int] = mapped_column()
+    views_120h: Mapped[int] = mapped_column()
+    views_144h: Mapped[int] = mapped_column()
+    views_168h: Mapped[int] = mapped_column()
+
+    posts_count_24h: Mapped[int] = mapped_column()
+    posts_count_48h: Mapped[int] = mapped_column()
+    posts_count_72h: Mapped[int] = mapped_column()
+    posts_count_96h: Mapped[int] = mapped_column()
+    posts_count_120h: Mapped[int] = mapped_column()
+    posts_count_144h: Mapped[int] = mapped_column()
+    posts_count_168h: Mapped[int] = mapped_column()
 
     recorded_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True), server_default=func.now()
@@ -40,13 +55,45 @@ class ChannelStatisticDAO(BaseDAO[ChannelStatistic, UUID]):
 
     @override
     async def create(
-        self, channel: Channel, subscribers_count: int, views: int, posts_count: int
+        self,
+        channel: Channel,
+        subscribers_count: int,
+        views: int,
+        posts_count: int,
+        views_24h: int,
+        views_48h: int,
+        views_72h: int,
+        views_96h: int,
+        views_120h: int,
+        views_144h: int,
+        views_168h: int,
+        posts_count_24h: int,
+        posts_count_48h: int,
+        posts_count_72h: int,
+        posts_count_96h: int,
+        posts_count_120h: int,
+        posts_count_144h: int,
+        posts_count_168h: int,
     ) -> ChannelStatistic:
         new_statistic = ChannelStatistic(
             channel=channel,
             subscribers_count=subscribers_count,
             views=views,
+            views_24h=views_24h,
+            views_48h=views_48h,
+            views_72h=views_72h,
+            views_96h=views_96h,
+            views_120h=views_120h,
+            views_144h=views_144h,
+            views_168h=views_168h,
             posts_count=posts_count,
+            posts_count_24h=posts_count_24h,
+            posts_count_48h=posts_count_48h,
+            posts_count_72h=posts_count_72h,
+            posts_count_96h=posts_count_96h,
+            posts_count_120h=posts_count_120h,
+            posts_count_144h=posts_count_144h,
+            posts_count_168h=posts_count_168h,
         )
         await self.save(new_statistic)
         return new_statistic
