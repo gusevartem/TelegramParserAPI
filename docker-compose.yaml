@@ -66,7 +66,7 @@ services:
       - http.host=0.0.0.0
       - transport.host=127.0.0.1
       - OPENSEARCH_INITIAL_ADMIN_PASSWORD=${OPENSEARCH_INITIAL_ADMIN_PASSWORD}
-      - "OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m"
+      - "OPENSEARCH_JAVA_OPTS=-Xms2g -Xmx2g"
     volumes:
       - opensearch-data:/usr/share/opensearch/data
     healthcheck:
