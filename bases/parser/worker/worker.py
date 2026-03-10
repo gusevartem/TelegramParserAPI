@@ -360,13 +360,27 @@ class Worker:
                 subscribers_count=full_channel.full_chat.participants_count or 0,  # pyright: ignore[reportAttributeAccessIssue]
                 views=sum(message.views for message in messages_stat),
                 posts_count=len(messages_stat),
-                views_24h=random.choice(hours_limit_messages_views[24]),
-                views_48h=random.choice(hours_limit_messages_views[48]),
-                views_72h=random.choice(hours_limit_messages_views[72]),
-                views_96h=random.choice(hours_limit_messages_views[96]),
-                views_120h=random.choice(hours_limit_messages_views[120]),
-                views_144h=random.choice(hours_limit_messages_views[144]),
-                views_168h=random.choice(hours_limit_messages_views[168]),
+                views_24h=random.choice(hours_limit_messages_views[24])
+                if len(hours_limit_messages_views[24]) != 0
+                else 0,
+                views_48h=random.choice(hours_limit_messages_views[48])
+                if len(hours_limit_messages_views[48]) != 0
+                else 0,
+                views_72h=random.choice(hours_limit_messages_views[72])
+                if len(hours_limit_messages_views[72]) != 0
+                else 0,
+                views_96h=random.choice(hours_limit_messages_views[96])
+                if len(hours_limit_messages_views[96]) != 0
+                else 0,
+                views_120h=random.choice(hours_limit_messages_views[120])
+                if len(hours_limit_messages_views[120]) != 0
+                else 0,
+                views_144h=random.choice(hours_limit_messages_views[144])
+                if len(hours_limit_messages_views[144]) != 0
+                else 0,
+                views_168h=random.choice(hours_limit_messages_views[168])
+                if len(hours_limit_messages_views[168]) != 0
+                else 0,
                 posts_count_24h=len(hours_limit_messages_views[24]),
                 posts_count_48h=len(hours_limit_messages_views[48]),
                 posts_count_72h=len(hours_limit_messages_views[72]),
