@@ -126,11 +126,11 @@ jobs:
         uses: appleboy/scp-action@v1
         with:
           host: ${{ secrets.SERVER_HOST }}
-          username: ${{ secrets.SERVER_USER }}
+          username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
           port: ${{ secrets.SERVER_SSH_PORT }}
           source: "deploy.zip,.env"
-          target: "/home/${{ secrets.SERVER_USER }}/TelegramParserAPI/"
+          target: "/home/${{ secrets.DEPLOY_USER }}/TelegramParserAPI/"
 
   deploy_container:
     runs-on: ubuntu-latest
@@ -141,15 +141,22 @@ jobs:
         uses: appleboy/ssh-action@v1
         with:
           host: ${{ secrets.SERVER_HOST }}
-          username: ${{ secrets.SERVER_USER }}
+          username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
           port: ${{ secrets.SERVER_SSH_PORT }}
           script: |
-            cd /home/${{ secrets.SERVER_USER }}/TelegramParserAPI/
+            set -e
+            cd /home/${{ secrets.DEPLOY_USER }}/TelegramParserAPI/
             unzip -o deploy.zip
             sudo docker compose build
-            sudo docker compose stop worker
-            sudo docker compose down worker
             sudo docker compose up -d --remove-orphans
+            sudo docker compose ps
+            for i in {1..20}; do
+              if curl --fail --silent --show-error http://127.0.0.1:5000/docs > /dev/null; then
+                break
+              fi
+              sleep 3
+            done
+            curl --fail --silent --show-error http://127.0.0.1:5000/docs > /dev/null
             sudo docker image prune -f
-            rm /home/${{ secrets.SERVER_USER }}/TelegramParserAPI/deploy.zip
+            rm /home/${{ secrets.DEPLOY_USER }}/TelegramParserAPI/deploy.zip
