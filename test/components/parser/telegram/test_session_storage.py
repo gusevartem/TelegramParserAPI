@@ -55,7 +55,7 @@ async def telegram_client(
 
 
 @pytest.mark.asyncio
-class TestMySQLSessionStorageBase:
+class TestPostgreSQLSessionStorageBase:
     async def test_add_session(
         self,
         session_storage: ITelegramSessionStorage,
@@ -106,7 +106,7 @@ class TestMySQLSessionStorageBase:
 
 
 @pytest.mark.asyncio
-class TestMySQLSessionFloodWait:
+class TestPostgreSQLSessionFloodWait:
     async def test_get_session_flood_wait(
         self,
         session_storage: ITelegramSessionStorage,

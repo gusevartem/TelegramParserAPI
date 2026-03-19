@@ -13,7 +13,6 @@ packages = [
     {include = "parser/opentele",from = "components"},
     {include = "parser/telegram",from = "components"},
     {include = "parser/scheduler",from = "components"},
-    {include = "parser/message_broker",from = "components"},
     {include = "parser/worker",from = "bases"},
     {include = "parser/scheduler_loop",from = "bases"},
 ]
@@ -30,14 +29,12 @@ aioboto3 = "^15.5.0"
 filetype = "^1.2.0"
 telethon = "^1.42.0"
 python-socks = {extras = ["asyncio"], version = "^2.8.0"}
-aio-pika = "^9.5.8"
 cryptg = "^0.5.2"
 structlog = "^25.5.0"
 opentelemetry-api = "^1.39.1"
 opentelemetry-sdk = "^1.39.1"
 opentelemetry-exporter-otlp = "^1.39.1"
 opentelemetry-instrumentation-sqlalchemy = "^0.60b1"
-opentelemetry-instrumentation-aio-pika = "^0.60b1"
 opentelemetry-instrumentation-fastapi = "^0.60b1"
 opentelemetry-instrumentation-asgi = "^0.60b1"
 

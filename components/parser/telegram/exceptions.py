@@ -23,15 +23,22 @@ class InvalidClient(TelegramException):
 
 class ClientBanned(TelegramException):
     """При бане клиента нужно выбрасывать это исключение.
-    Оно будет обработано в RabbitMQSessionStorage: сессия не сохранится в очередь.
-    Telegram: удалит сессию из базы данных."""
+    MySQLSessionStorage пометит аккаунт как banned и не будет его выдавать."""
+
+    ...
+
+
+class ChannelAccessDenied(TelegramException):
+    """Аккаунт забанен в конкретном канале, но сессия остаётся рабочей.
+    Задача должна быть помечена как ошибка, сессия продолжает работу."""
 
     ...
 
 
 class FloodWait(TelegramException):
     """В случае FloodWait у клиента нужно выбрасывать это исключение.
-    Оно будет обработано в RabbitMQSessionStorage: сессия уйдет полежать на e.seconds"""
+    MySQLSessionStorage выставит locked_until = now + seconds, аккаунт будет
+    пропускаться в выборке до истечения блокировки."""
 
     def __init__(self, seconds: int, message: str) -> None:
         self.seconds: int = seconds

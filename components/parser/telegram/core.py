@@ -20,7 +20,7 @@ from .exceptions import (
 )
 from .session_storage import (
     ITelegramSessionStorage,
-    MySQLSessionStorage,
+    PostgreSQLSessionStorage,
 )
 from .settings import TelegramSettings
 
@@ -302,7 +302,7 @@ class TelegramProvider(Provider):
         return TelegramClient
 
     session_storage: CompositeDependencySource = provide(
-        MySQLSessionStorage,
+        PostgreSQLSessionStorage,
         scope=Scope.APP,
         provides=ITelegramSessionStorage,
     )

@@ -26,6 +26,7 @@ from parser.persistence import (
 from parser.scheduler import ClaimTask
 from parser.storage import IStorage
 from parser.telegram import (
+    ChannelAccessDenied,
     FloodWait,
     InvalidClient,
     ITelegram,
@@ -221,6 +222,14 @@ class Worker:
             task_span.record_exception(e)
             task_logger.error("task_error", action="mark_as_error", exc_info=True)
 
+        except ChannelAccessDenied as e:
+            await change_task_status(ParsingTaskStatus.ERROR)
+            task_span.set_status(Status(StatusCode.ERROR, str(e)))
+            task_span.record_exception(e)
+            task_logger.error(
+                "channel_access_denied", action="mark_as_error", exc_info=True
+            )
+
         except TemporaryCannotProcessTask as e:
             await change_task_status(ParsingTaskStatus.IDLE)
             task_logger.warning(
@@ -243,6 +252,13 @@ class Worker:
         task_logger.info("got_channel")
         task_logger = task_logger.bind(channel_id=channel_entity.id)
         task_span.set_attribute("channel_id", channel_entity.id)
+
+        await asyncio.sleep(
+            random.uniform(
+                self.settings.request_delay_min_seconds,
+                self.settings.request_delay_max_seconds,
+            )
+        )
 
         async with self._dao_factory() as dao_factory:
             parsing_task_dao = dao_factory(ParsingTaskDAO)
@@ -283,7 +299,16 @@ class Worker:
             )
             raise TaskError("Cannot get channel full info")
 
-        collected_messages = await self._collect_messages(client, channel_entity)
+        await asyncio.sleep(
+            random.uniform(
+                self.settings.request_delay_min_seconds,
+                self.settings.request_delay_max_seconds,
+            )
+        )
+
+        collected_messages = await self._collect_messages(
+            client, channel_entity, task.last_parsed_at
+        )
 
         async with self._dao_factory() as dao_factory:
             task_logger.info("saving_channel_to_database")
@@ -606,7 +631,7 @@ class Worker:
                             "Resolved entity is not a Channel. "
                             + f"It is {type(entity).__name__}"
                         )
-                    if (entity.left is None) or entity.left:
+                    if entity.left is True:
                         logger.info("channel_is_public_joining", username=username)
                         await client(
                             functions.channels.JoinChannelRequest(
@@ -652,15 +677,28 @@ class Worker:
                     raise TaskError(f"Invalid username format: {username}")
 
     async def _collect_messages(
-        self, client: ITelegramClient, channel: Channel
+        self,
+        client: ITelegramClient,
+        channel: Channel,
+        last_parsed_at: int | None,
     ) -> list[_ParsedMessage]:
         with self.tracer.start_as_current_span("worker.collect_messages") as span:
             logger = self.logger.bind(channel_id=channel.id)
             span.set_attribute("channel.id", channel.id)
             now_utc = datetime.now(timezone.utc)
-            time_limit = now_utc - timedelta(
+            full_time_limit = now_utc - timedelta(
                 hours=self.settings.message_monitoring_time_limit_hours
             )
+            if last_parsed_at is not None:
+                # Incremental fetch: only retrieve messages newer than the previous
+                # run (minus 1 h overlap to avoid missing any late-arriving messages).
+                incremental_limit = datetime.fromtimestamp(
+                    last_parsed_at, tz=timezone.utc
+                ) - timedelta(hours=1)
+                time_limit = max(incremental_limit, full_time_limit)
+            else:
+                time_limit = full_time_limit
+            span.set_attribute("incremental", last_parsed_at is not None)
 
             grouped_messages: dict[int, _ParsedMessage] = {}
 

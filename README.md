@@ -1,6 +1,6 @@
 # TelegramParserAPI
 
-Сервис для сбора, хранения и предоставления статистики Telegram-каналов. Получает данные через Telegram MTProto API (Telethon), сохраняет в MySQL, медиафайлы — в S3-совместимое хранилище (MinIO). Доступ к данным — через REST API.
+Сервис для сбора, хранения и предоставления статистики Telegram-каналов. Получает данные через Telegram MTProto API (Telethon), сохраняет в PostgreSQL, медиафайлы — в S3-совместимое хранилище (MinIO). Доступ к данным — через REST API.
 
 ## Архитектура
 
@@ -15,7 +15,6 @@ bases/parser/         ← точки входа (исполняемые комп
 components/parser/    ← переиспользуемые библиотечные компоненты
   dto/                  Pydantic DTO-модели
   logging/              настройка structlog
-  message_broker/       абстракция RabbitMQ (aio-pika)
   opentele/             конвертация Telegram-сессий
   persistence/          SQLAlchemy ORM-модели + DAO
   scheduler/            логика bucket-планирования задач
@@ -34,25 +33,25 @@ projects/             ← деплоируемые сервисы (каждый 
 ### Поток данных
 
 ```
-Scheduler ──► RabbitMQ ──► Worker ──► MySQL + MinIO
-                                │
-                    API ◄───────┘
+Scheduler ──► PostgreSQL (processing) ──► Worker ──► PostgreSQL + MinIO
+                                                │
+                              API ◄─────────────┘
 ```
 
 ### Scheduler
 
-Запускается каждые 30 секунд. Выбирает из MySQL задачи (`parsing_task`), чей **bucket** (минута 0–59) попадает в текущее временное окно, и публикует их в очередь RabbitMQ. Задачи равномерно распределяются по бакетам при создании, обеспечивая равномерную нагрузку в течение часа — каждый канал парсится примерно раз в час.
+Запускается каждые 30 секунд. Выбирает из PostgreSQL задачи (`parsing_task`), чей **bucket** (минута 0–59) попадает в текущее временное окно, и помечает их статусом `processing`. Задачи равномерно распределяются по бакетам при создании, обеспечивая равномерную нагрузку в течение часа — каждый канал парсится примерно раз в час.
 
 ### Worker
 
-Держит одно активное Telegram-соединение за сессию (до `account_lock_hours`, по умолчанию 20 ч). Получает задачу из очереди, через Telethon запрашивает у Telegram:
+Держит одно активное Telegram-соединение за сессию (до `account_lock_hours`, по умолчанию 20 ч). Захватывает задачи из БД через `SELECT FOR UPDATE SKIP LOCKED` — конкурентно-безопасный паттерн без внешнего брокера. Через Telethon запрашивает у Telegram:
 
 - метаданные канала (название, описание, ID)
 - логотип — скачивает и загружает в MinIO
 - список последних сообщений и их просмотры
 - агрегированную статистику: подписчики, суммарные просмотры и количество постов за окна 24–168 часов (с шагом 24 ч)
 
-Результат сохраняется в MySQL. При `FloodWait` или бане аккаунта воркер завершает сессию, аккаунт помечается как `banned`.
+Результат сохраняется в PostgreSQL. При `FloodWait` или бане аккаунта воркер завершает сессию, аккаунт помечается как `banned`.
 
 ### API
 
@@ -93,9 +92,9 @@ FastAPI-приложение с двумя группами эндпоинтов
 |-----------|-----------|
 | API-фреймворк | FastAPI + Uvicorn |
 | Telegram MTProto | Telethon |
-| Message broker | RabbitMQ (aio-pika) |
 | ORM + миграции | SQLAlchemy (async) + Alembic |
-| База данных | MySQL 8 |
+| База данных | PostgreSQL 17 |
+| Очередь задач | PostgreSQL (SELECT FOR UPDATE SKIP LOCKED) |
 | Объектное хранилище | MinIO (S3-compatible) |
 | Dependency injection | Dishka |
 | Валидация / конфиг | Pydantic + pydantic-settings |
@@ -106,3 +105,22 @@ FastAPI-приложение с двумя группами эндпоинтов
 | Управление зависимостями | Poetry |
 | Тестирование | pytest |
 | Линтер / типизация | ruff + mypy |
+
+## Зависимости (инфраструктура)
+
+| Сервис | Назначение |
+|--------|-----------|
+| PostgreSQL 17 | Основная БД: задачи парсинга, каналы, статистика, аккаунты |
+| MinIO | Хранение медиафайлов (логотипы каналов) |
+| OpenSearch | Полнотекстовый поиск (опционально) |
+| Jaeger | Distributed tracing через OpenTelemetry |
+
+## Деплой
+
+Образы собираются в GitHub Actions и публикуются в GHCR:
+- `ghcr.io/ycalk/telegramparserapi-api:latest`
+- `ghcr.io/ycalk/telegramparserapi-worker:latest`
+- `ghcr.io/ycalk/telegramparserapi-migrator:latest`
+- `ghcr.io/ycalk/telegramparserapi-scheduler:latest`
+
+Деплой происходит автоматически при пуше в `main` через Coolify webhook. Подробнее: [DEPLOY.md](README.md).

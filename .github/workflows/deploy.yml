@@ -90,6 +90,13 @@ jobs:
           poetry build-project
           poetry export -f requirements.txt --output requirements.txt --without-hashes
 
+      - name: Build scheduler wheel
+        working-directory: projects/scheduler
+        run: |
+          poetry install
+          poetry build-project
+          poetry export -f requirements.txt --output requirements.txt --without-hashes
+
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
         with:
@@ -117,6 +124,13 @@ jobs:
           context: projects/worker
           push: true
           tags: ghcr.io/ycalk/telegramparserapi-worker:latest
+
+      - name: Build and push scheduler image
+        uses: docker/build-push-action@v5
+        with:
+          context: projects/scheduler
+          push: true
+          tags: ghcr.io/ycalk/telegramparserapi-scheduler:latest
 
   deploy:
     runs-on: ubuntu-latest

@@ -1,6 +1,7 @@
 from .client import ITelegramClient
 from .core import ITelegram, TelegramProvider
 from .exceptions import (
+    ChannelAccessDenied,
     ClientBanned,
     FloodWait,
     InvalidClient,
@@ -20,4 +21,5 @@ __all__ = [
     "InvalidClient",
     "ClientBanned",
     "FloodWait",
+    "ChannelAccessDenied",
 ]

@@ -18,11 +18,6 @@ class TelegramSettings(BaseSettings):
     account_lock_hours: int = 20
     save_telegram_responses: bool = False
 
-    session_storage_queue_name: str = "telegram.session_storage.queue"
-    session_storage_delayed_exchange_name: str = (
-        "telegram.session_storage.delayed_exchange"
-    )
-
     default_api_id: int
     default_api_hash: str
     default_device_model: str

@@ -1,22 +1,17 @@
 services:
-  mysql:
-    image: mysql:8.4.8
+  postgres:
+    image: postgres:17-alpine
     restart: always
     environment:
-      - MYSQL_USER=${MYSQL_USER}
-      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
-      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
-      - MYSQL_DATABASE=${MYSQL_DATABASE}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
     ports:
-      - "127.0.0.1:${MYSQL_PORT}:3306"
+      - "127.0.0.1:${POSTGRES_PORT}:5432"
     volumes:
-      - mysql-data-dev:/var/lib/mysql
+      - postgres-data-dev:/var/lib/postgresql/data
     healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "mysqladmin ping -h 127.0.0.1 -u root -p$$MYSQL_ROOT_PASSWORD",
-        ]
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -41,5 +36,5 @@ services:
       retries: 3
 
 volumes:
-  mysql-data-dev:
+  postgres-data-dev:
   minio-data-dev:

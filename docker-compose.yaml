@@ -16,7 +16,7 @@ services:
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - POSTGRES_DB=${POSTGRES_DB}
     ports:
-      - "${POSTGRES_PORT}:5432"
+      - "127.0.0.1:${POSTGRES_PORT}:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
@@ -177,8 +177,25 @@ services:
       migrator:
         condition: service_started
 
+  scheduler:
+    image: ghcr.io/ycalk/telegramparserapi-scheduler:latest
+    restart: always
+    environment:
+      - DEBUG=false
+
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+
+      - TRACE_EXPORTER_ENDPOINT=http://jaeger:4318/v1/traces
+    depends_on:
+      <<: *additional_services_healthy
+      migrator:
+        condition: service_started
+
 volumes:
   postgres-data:
-  rabbitmq-data:
   minio-data:
   opensearch-data:

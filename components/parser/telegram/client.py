@@ -25,7 +25,7 @@ from telethon.sessions.abstract import Session
 from telethon.tl import TLObject
 from telethon.types import Message, TypePhotoSize, User
 
-from .exceptions import ClientBanned, FloodWait
+from .exceptions import ChannelAccessDenied, ClientBanned, FloodWait
 from .settings import TelegramSettings
 
 P = ParamSpec("P")
@@ -38,14 +38,18 @@ def _telethon_exception_handler():
         yield
     except errors.FloodWaitError as e:
         raise FloodWait(seconds=e.seconds, message=str(e)) from e
+    except errors.PeerFloodError as e:
+        # Temporary rate-limit on join/invite ops; account recovers after cooldown.
+        raise FloodWait(seconds=60 * 60 * 24, message=str(e)) from e
+    except errors.UserBannedInChannelError as e:
+        # Banned from this specific channel only; the session is still valid.
+        raise ChannelAccessDenied(f"Account banned from channel: {str(e)}") from e
     except (
         errors.UserDeactivatedError,
-        errors.UserBannedInChannelError,
         errors.AuthKeyDuplicatedError,
         errors.SessionRevokedError,
         errors.AuthKeyUnregisteredError,
         errors.UserDeactivatedBanError,
-        errors.PeerFloodError,
         errors.UserRestrictedError,
         errors.FrozenMethodInvalidError,
     ) as e:
@@ -161,6 +165,9 @@ class TelegramClient(ITelegramClient):
             "lang_code": credentials.lang_code,
             "system_lang_code": credentials.system_lang_code,
             "timeout": requests_timeout,
+            # Surface ALL FloodWait errors to our custom handler instead of
+            # Telethon silently sleeping for waits ≤ 60 s.
+            "flood_sleep_threshold": 0,
         }
 
         if proxy is not None:
