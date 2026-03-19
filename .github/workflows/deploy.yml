@@ -8,15 +8,6 @@ on:
 jobs:
   test_project:
     runs-on: ubuntu-latest
-    environment: staging
-    env:
-      DEFAULT_API_ID: ${{ secrets.DEFAULT_API_ID }}
-      DEFAULT_API_HASH: ${{ secrets.DEFAULT_API_HASH }}
-      DEFAULT_DEVICE_MODEL: ${{ vars.DEFAULT_DEVICE_MODEL }}
-      DEFAULT_SYSTEM_VERSION: ${{ vars.DEFAULT_SYSTEM_VERSION }}
-      DEFAULT_APP_VERSION: ${{ vars.DEFAULT_APP_VERSION }}
-      DEFAULT_LANG_CODE: ${{ vars.DEFAULT_LANG_CODE }}
-      DEFAULT_SYSTEM_LANG_CODE: ${{ vars.DEFAULT_SYSTEM_LANG_CODE }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -44,7 +35,6 @@ jobs:
 
   build_and_push:
     runs-on: ubuntu-latest
-    environment: staging
     permissions:
       contents: read
       packages: write
