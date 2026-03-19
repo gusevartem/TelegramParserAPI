@@ -1,5 +1,7 @@
 # TelegramParserAPI
 
+**GitHub:** https://github.com/gusevartem/TelegramParserAPI
+
 Сервис для сбора, хранения и предоставления статистики Telegram-каналов. Получает данные через Telegram MTProto API (Telethon), сохраняет в PostgreSQL, медиафайлы — в S3-совместимое хранилище (MinIO). Доступ к данным — через REST API.
 
 ## Архитектура
@@ -118,9 +120,9 @@ FastAPI-приложение с двумя группами эндпоинтов
 ## Деплой
 
 Образы собираются в GitHub Actions и публикуются в GHCR:
-- `ghcr.io/ycalk/telegramparserapi-api:latest`
-- `ghcr.io/ycalk/telegramparserapi-worker:latest`
-- `ghcr.io/ycalk/telegramparserapi-migrator:latest`
-- `ghcr.io/ycalk/telegramparserapi-scheduler:latest`
+- `ghcr.io/gusevartem/telegramparserapi-api:latest`
+- `ghcr.io/gusevartem/telegramparserapi-worker:latest`
+- `ghcr.io/gusevartem/telegramparserapi-migrator:latest`
+- `ghcr.io/gusevartem/telegramparserapi-scheduler:latest`
 
 Деплой происходит автоматически при пуше в `main` через Coolify webhook. Подробнее: [DEPLOY.md](README.md).

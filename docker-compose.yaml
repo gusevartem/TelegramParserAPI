@@ -88,7 +88,7 @@ services:
   # Services
 
   migrator:
-    image: ghcr.io/ycalk/telegramparserapi-migrator:latest
+    image: ghcr.io/gusevartem/telegramparserapi-migrator:latest
     environment:
       - DEBUG=false
 
@@ -103,7 +103,7 @@ services:
       <<: *additional_services_healthy
 
   api:
-    image: ghcr.io/ycalk/telegramparserapi-api:latest
+    image: ghcr.io/gusevartem/telegramparserapi-api:latest
     restart: always
     ports:
       - "127.0.0.1:5000:8080"
@@ -141,7 +141,7 @@ services:
         condition: service_started
 
   worker:
-    image: ghcr.io/ycalk/telegramparserapi-worker:latest
+    image: ghcr.io/gusevartem/telegramparserapi-worker:latest
     restart: always
     environment:
       - DEBUG=false
@@ -178,7 +178,7 @@ services:
         condition: service_started
 
   scheduler:
-    image: ghcr.io/ycalk/telegramparserapi-scheduler:latest
+    image: ghcr.io/gusevartem/telegramparserapi-scheduler:latest
     restart: always
     environment:
       - DEBUG=false

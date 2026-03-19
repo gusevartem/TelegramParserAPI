@@ -109,28 +109,28 @@ jobs:
         with:
           context: projects/api
           push: true
-          tags: ghcr.io/ycalk/telegramparserapi-api:latest
+          tags: ghcr.io/gusevartem/telegramparserapi-api:latest
 
       - name: Build and push migrator image
         uses: docker/build-push-action@v5
         with:
           context: projects/migrator
           push: true
-          tags: ghcr.io/ycalk/telegramparserapi-migrator:latest
+          tags: ghcr.io/gusevartem/telegramparserapi-migrator:latest
 
       - name: Build and push worker image
         uses: docker/build-push-action@v5
         with:
           context: projects/worker
           push: true
-          tags: ghcr.io/ycalk/telegramparserapi-worker:latest
+          tags: ghcr.io/gusevartem/telegramparserapi-worker:latest
 
       - name: Build and push scheduler image
         uses: docker/build-push-action@v5
         with:
           context: projects/scheduler
           push: true
-          tags: ghcr.io/ycalk/telegramparserapi-scheduler:latest
+          tags: ghcr.io/gusevartem/telegramparserapi-scheduler:latest
 
   deploy:
     runs-on: ubuntu-latest

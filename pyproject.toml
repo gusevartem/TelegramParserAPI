@@ -61,3 +61,6 @@ api = "parser.api:run"
 worker = "parser.worker:run"
 convert_to_telethon = "development.convert_to_telethon:run"
 call_parser = "development.call_parser:run"
+
+[tool.pytest.ini_options]
+asyncio_default_fixture_loop_scope = "class"
