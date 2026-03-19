@@ -80,11 +80,11 @@ class PersistenceProvider(Provider):
         persistence_settings: PersistenceSettings,
     ) -> DatabaseUrl:
         url = (
-            f"mysql+asyncmy://{persistence_settings.mysql_user}"
-            + f":{persistence_settings.mysql_password}"
-            + f"@{persistence_settings.mysql_host}"
-            + f":{persistence_settings.mysql_port}"
-            + f"/{persistence_settings.mysql_database}"
+            f"postgresql+asyncpg://{persistence_settings.postgres_user}"
+            + f":{persistence_settings.postgres_password}"
+            + f"@{persistence_settings.postgres_host}"
+            + f":{persistence_settings.postgres_port}"
+            + f"/{persistence_settings.postgres_database}"
         )
         return DatabaseUrl(url)
 
@@ -99,10 +99,9 @@ class PersistenceProvider(Provider):
         engine = create_async_engine(
             database_url,
             echo=False,
-            pool_size=persistence_settings.mysql_pool_size,
-            max_overflow=persistence_settings.mysql_max_overflow,
+            pool_size=persistence_settings.postgres_pool_size,
+            max_overflow=persistence_settings.postgres_max_overflow,
             pool_pre_ping=True,
-            connect_args={"init_command": "SET time_zone = '+00:00'"},
             isolation_level="READ COMMITTED",
         )
         SQLAlchemyInstrumentor().instrument(

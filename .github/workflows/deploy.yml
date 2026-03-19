@@ -42,9 +42,12 @@ jobs:
         run: |
           poetry run pytest
 
-  build_wheels:
+  build_and_push:
     runs-on: ubuntu-latest
     environment: staging
+    permissions:
+      contents: read
+      packages: write
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -59,104 +62,67 @@ jobs:
         with:
           version: "2.3.1"
 
-      - name: Instal Poetry plugins
+      - name: Install Poetry plugins and dependencies
         run: |
           poetry self add poetry-multiproject-plugin
           poetry self add poetry-polylith-plugin
           poetry self add poetry-plugin-export
           poetry install
 
-      - name: Create api project wheel
+      - name: Build api wheel
         working-directory: projects/api
         run: |
           poetry install
           poetry build-project
           poetry export -f requirements.txt --output requirements.txt --without-hashes
 
-      - name: Create migrator project wheel
+      - name: Build migrator wheel
         working-directory: projects/migrator
         run: |
           poetry install
           poetry build-project
           poetry export -f requirements.txt --output requirements.txt --without-hashes
 
-      - name: Create worker project wheel
+      - name: Build worker wheel
         working-directory: projects/worker
         run: |
           poetry install
           poetry build-project
           poetry export -f requirements.txt --output requirements.txt --without-hashes
 
-      - name: Archive code for deploy
-        run: |
-          zip -r deploy.zip . -x '*.git*' '*.github/*'
-
-      - name: Create .env file
-        run: |
-          echo "OPENSEARCH_INITIAL_ADMIN_PASSWORD=${{ secrets.OPENSEARCH_INITIAL_ADMIN_PASSWORD }}" >> .env
-          echo "SECRET_KEY=${{ secrets.SECRET_KEY }}" >> .env
-          echo "SAVE_TELEGRAM_RESPONSES=${{ vars.SAVE_TELEGRAM_RESPONSES }}" >> .env
-
-          echo "MYSQL_USER=${{ secrets.MYSQL_USER }}" >> .env
-          echo "MYSQL_PASSWORD=${{ secrets.MYSQL_PASSWORD }}" >> .env
-          echo "MYSQL_DATABASE=${{ secrets.MYSQL_DATABASE }}" >> .env
-          echo "MYSQL_ROOT_PASSWORD=${{ secrets.MYSQL_ROOT_PASSWORD }}" >> .env
-          echo "MYSQL_PORT=${{ secrets.MYSQL_PORT }}" >> .env
-
-          echo "S3_ACCESS_KEY=${{ secrets.S3_ACCESS_KEY }}" >> .env
-          echo "S3_SECRET_KEY=${{ secrets.S3_SECRET_KEY }}" >> .env
-          echo "S3_BUCKET_NAME=${{ secrets.S3_BUCKET_NAME }}" >> .env
-          echo "MINIO_SERVER_URL=${{ vars.MINIO_SERVER_URL }}" >> .env
-
-          echo "RABBITMQ_LOGIN=${{ secrets.RABBITMQ_LOGIN }}" >> .env
-          echo "RABBITMQ_PASSWORD=${{ secrets.RABBITMQ_PASSWORD }}" >> .env
-
-          echo "DEFAULT_API_ID=${{ secrets.DEFAULT_API_ID }}" >> .env
-          echo "DEFAULT_API_HASH=${{ secrets.DEFAULT_API_HASH }}" >> .env
-          echo "DEFAULT_DEVICE_MODEL=${{ vars.DEFAULT_DEVICE_MODEL }}" >> .env
-          echo "DEFAULT_SYSTEM_VERSION=${{ vars.DEFAULT_SYSTEM_VERSION }}" >> .env
-          echo "DEFAULT_APP_VERSION=${{ vars.DEFAULT_APP_VERSION }}" >> .env
-          echo "DEFAULT_LANG_CODE=${{ vars.DEFAULT_LANG_CODE }}" >> .env
-          echo "DEFAULT_SYSTEM_LANG_CODE=${{ vars.DEFAULT_SYSTEM_LANG_CODE }}" >> .env
-
-          echo "MESSAGE_MONITORING_TIME_LIMIT_HOURS=${{ vars.MESSAGE_MONITORING_TIME_LIMIT_HOURS }}" >> .env
-          echo "CHANNEL_MESSAGES_STAT_TIME_LIMIT_HOURS=${{ vars.CHANNEL_MESSAGES_STAT_TIME_LIMIT_HOURS }}" >> .env
-
-      - name: Transfer files to server
-        uses: appleboy/scp-action@v1
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
         with:
-          host: ${{ secrets.SERVER_HOST }}
-          username: ${{ secrets.DEPLOY_USER }}
-          key: ${{ secrets.SERVER_SSH_KEY }}
-          port: ${{ secrets.SERVER_SSH_PORT }}
-          source: "deploy.zip,.env"
-          target: "/home/${{ secrets.DEPLOY_USER }}/TelegramParserAPI/"
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-  deploy_container:
+      - name: Build and push api image
+        uses: docker/build-push-action@v5
+        with:
+          context: projects/api
+          push: true
+          tags: ghcr.io/ycalk/telegramparserapi-api:latest
+
+      - name: Build and push migrator image
+        uses: docker/build-push-action@v5
+        with:
+          context: projects/migrator
+          push: true
+          tags: ghcr.io/ycalk/telegramparserapi-migrator:latest
+
+      - name: Build and push worker image
+        uses: docker/build-push-action@v5
+        with:
+          context: projects/worker
+          push: true
+          tags: ghcr.io/ycalk/telegramparserapi-worker:latest
+
+  deploy:
     runs-on: ubuntu-latest
     environment: staging
-    needs: [build_wheels, test_project]
+    needs: [build_and_push, test_project]
     steps:
-      - name: Deploy
-        uses: appleboy/ssh-action@v1
-        with:
-          host: ${{ secrets.SERVER_HOST }}
-          username: ${{ secrets.DEPLOY_USER }}
-          key: ${{ secrets.SERVER_SSH_KEY }}
-          port: ${{ secrets.SERVER_SSH_PORT }}
-          script: |
-            set -e
-            cd /home/${{ secrets.DEPLOY_USER }}/TelegramParserAPI/
-            unzip -o deploy.zip
-            sudo docker compose build
-            sudo docker compose up -d --remove-orphans
-            sudo docker compose ps
-            for i in {1..20}; do
-              if curl --fail --silent --show-error http://127.0.0.1:5000/docs > /dev/null; then
-                break
-              fi
-              sleep 3
-            done
-            curl --fail --silent --show-error http://127.0.0.1:5000/docs > /dev/null
-            sudo docker image prune -f
-            rm /home/${{ secrets.DEPLOY_USER }}/TelegramParserAPI/deploy.zip
+      - name: Trigger Coolify redeploy
+        run: |
+          curl -fsSL "${{ secrets.COOLIFY_WEBHOOK_PARSER }}"

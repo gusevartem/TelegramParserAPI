@@ -10,7 +10,6 @@ from collections.abc import Sequence
 
 import sqlalchemy as sa
 from alembic import op
-from sqlalchemy.dialects import mysql
 
 # revision identifiers, used by Alembic.
 revision: str = "d47bd9ff611b"
@@ -50,8 +49,8 @@ def downgrade() -> None:
         "worker_account_usage",
         sa.Column(
             "taken_at",
-            mysql.TIMESTAMP(),
-            server_default=sa.text("(now())"),
+            sa.TIMESTAMP(timezone=True),
+            server_default=sa.text("now()"),
             nullable=False,
         ),
     )

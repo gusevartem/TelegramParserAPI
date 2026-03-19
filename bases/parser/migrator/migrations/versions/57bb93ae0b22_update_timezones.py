@@ -10,7 +10,6 @@ from collections.abc import Sequence
 
 import sqlalchemy as sa
 from alembic import op
-from sqlalchemy.dialects import mysql
 
 # revision identifiers, used by Alembic.
 revision: str = "57bb93ae0b22"
@@ -25,7 +24,7 @@ def upgrade() -> None:
     op.alter_column(
         "channel",
         "recorded_at",
-        existing_type=mysql.DATETIME(),
+        existing_type=sa.DateTime(),
         type_=sa.TIMESTAMP(timezone=True),
         existing_nullable=False,
         existing_server_default=sa.text("(now())"),
@@ -33,7 +32,7 @@ def upgrade() -> None:
     op.alter_column(
         "channel",
         "updated_at",
-        existing_type=mysql.DATETIME(),
+        existing_type=sa.DateTime(),
         type_=sa.TIMESTAMP(timezone=True),
         existing_nullable=False,
         existing_server_default=sa.text("(now())"),
@@ -41,14 +40,14 @@ def upgrade() -> None:
     op.alter_column(
         "channel_message",
         "created_at",
-        existing_type=mysql.DATETIME(),
+        existing_type=sa.DateTime(),
         type_=sa.TIMESTAMP(timezone=True),
         existing_nullable=False,
     )
     op.alter_column(
         "channel_message",
         "recorded_at",
-        existing_type=mysql.DATETIME(),
+        existing_type=sa.DateTime(),
         type_=sa.TIMESTAMP(timezone=True),
         existing_nullable=False,
         existing_server_default=sa.text("(now())"),
@@ -56,7 +55,7 @@ def upgrade() -> None:
     op.alter_column(
         "channel_message",
         "updated_at",
-        existing_type=mysql.DATETIME(),
+        existing_type=sa.DateTime(),
         type_=sa.TIMESTAMP(timezone=True),
         existing_nullable=False,
         existing_server_default=sa.text("(now())"),
@@ -64,7 +63,7 @@ def upgrade() -> None:
     op.alter_column(
         "channel_message_statistic",
         "recorded_at",
-        existing_type=mysql.DATETIME(),
+        existing_type=sa.DateTime(),
         type_=sa.TIMESTAMP(timezone=True),
         existing_nullable=False,
         existing_server_default=sa.text("(now())"),
@@ -72,7 +71,7 @@ def upgrade() -> None:
     op.alter_column(
         "channel_statistic",
         "recorded_at",
-        existing_type=mysql.DATETIME(),
+        existing_type=sa.DateTime(),
         type_=sa.TIMESTAMP(timezone=True),
         existing_nullable=False,
         existing_server_default=sa.text("(now())"),
@@ -80,7 +79,7 @@ def upgrade() -> None:
     op.alter_column(
         "media",
         "recorded_at",
-        existing_type=mysql.DATETIME(),
+        existing_type=sa.DateTime(),
         type_=sa.TIMESTAMP(timezone=True),
         existing_nullable=False,
         existing_server_default=sa.text("(now())"),
@@ -91,14 +90,14 @@ def upgrade() -> None:
     op.alter_column(
         "parsing_task",
         "last_parsed_at",
-        existing_type=mysql.DATETIME(),
+        existing_type=sa.DateTime(),
         type_=sa.TIMESTAMP(timezone=True),
         existing_nullable=True,
     )
     op.alter_column(
         "parsing_task",
         "created_at",
-        existing_type=mysql.DATETIME(),
+        existing_type=sa.DateTime(),
         type_=sa.TIMESTAMP(timezone=True),
         existing_nullable=False,
         existing_server_default=sa.text("(now())"),
@@ -109,7 +108,7 @@ def upgrade() -> None:
     op.alter_column(
         "telegram_client",
         "recorded_at",
-        existing_type=mysql.DATETIME(),
+        existing_type=sa.DateTime(),
         type_=sa.TIMESTAMP(timezone=True),
         existing_nullable=False,
         existing_server_default=sa.text("(now())"),
@@ -117,7 +116,7 @@ def upgrade() -> None:
     op.alter_column(
         "telegram_client",
         "updated_at",
-        existing_type=mysql.DATETIME(),
+        existing_type=sa.DateTime(),
         type_=sa.TIMESTAMP(timezone=True),
         existing_nullable=False,
         existing_server_default=sa.text("(now())"),
@@ -125,7 +124,7 @@ def upgrade() -> None:
     op.alter_column(
         "telegram_client_proxy",
         "recorded_at",
-        existing_type=mysql.DATETIME(),
+        existing_type=sa.DateTime(),
         type_=sa.TIMESTAMP(timezone=True),
         existing_nullable=False,
         existing_server_default=sa.text("(now())"),
@@ -133,7 +132,7 @@ def upgrade() -> None:
     op.alter_column(
         "telegram_client_proxy",
         "updated_at",
-        existing_type=mysql.DATETIME(),
+        existing_type=sa.DateTime(),
         type_=sa.TIMESTAMP(timezone=True),
         existing_nullable=False,
         existing_server_default=sa.text("(now())"),
@@ -148,7 +147,7 @@ def downgrade() -> None:
         "telegram_client_proxy",
         "updated_at",
         existing_type=sa.TIMESTAMP(timezone=True),
-        type_=mysql.DATETIME(),
+        type_=sa.DateTime(),
         existing_nullable=False,
         existing_server_default=sa.text("(now())"),
     )
@@ -156,7 +155,7 @@ def downgrade() -> None:
         "telegram_client_proxy",
         "recorded_at",
         existing_type=sa.TIMESTAMP(timezone=True),
-        type_=mysql.DATETIME(),
+        type_=sa.DateTime(),
         existing_nullable=False,
         existing_server_default=sa.text("(now())"),
     )
@@ -164,7 +163,7 @@ def downgrade() -> None:
         "telegram_client",
         "updated_at",
         existing_type=sa.TIMESTAMP(timezone=True),
-        type_=mysql.DATETIME(),
+        type_=sa.DateTime(),
         existing_nullable=False,
         existing_server_default=sa.text("(now())"),
     )
@@ -172,12 +171,12 @@ def downgrade() -> None:
         "telegram_client",
         "recorded_at",
         existing_type=sa.TIMESTAMP(timezone=True),
-        type_=mysql.DATETIME(),
+        type_=sa.DateTime(),
         existing_nullable=False,
         existing_server_default=sa.text("(now())"),
     )
     op.add_column(
-        "parsing_task", sa.Column("link", mysql.VARCHAR(length=255), nullable=False)
+        "parsing_task", sa.Column("link", sa.String(length=255), nullable=False)
     )
     op.drop_index(op.f("ix_parsing_task_url"), table_name="parsing_task")
     op.create_index(op.f("ix_parsing_task_link"), "parsing_task", ["link"], unique=True)
@@ -185,7 +184,7 @@ def downgrade() -> None:
         "parsing_task",
         "created_at",
         existing_type=sa.TIMESTAMP(timezone=True),
-        type_=mysql.DATETIME(),
+        type_=sa.DateTime(),
         existing_nullable=False,
         existing_server_default=sa.text("(now())"),
     )
@@ -193,7 +192,7 @@ def downgrade() -> None:
         "parsing_task",
         "last_parsed_at",
         existing_type=sa.TIMESTAMP(timezone=True),
-        type_=mysql.DATETIME(),
+        type_=sa.DateTime(),
         existing_nullable=True,
     )
     op.drop_column("parsing_task", "url")
@@ -201,7 +200,7 @@ def downgrade() -> None:
         "media",
         "recorded_at",
         existing_type=sa.TIMESTAMP(timezone=True),
-        type_=mysql.DATETIME(),
+        type_=sa.DateTime(),
         existing_nullable=False,
         existing_server_default=sa.text("(now())"),
     )
@@ -209,7 +208,7 @@ def downgrade() -> None:
         "channel_statistic",
         "recorded_at",
         existing_type=sa.TIMESTAMP(timezone=True),
-        type_=mysql.DATETIME(),
+        type_=sa.DateTime(),
         existing_nullable=False,
         existing_server_default=sa.text("(now())"),
     )
@@ -217,7 +216,7 @@ def downgrade() -> None:
         "channel_message_statistic",
         "recorded_at",
         existing_type=sa.TIMESTAMP(timezone=True),
-        type_=mysql.DATETIME(),
+        type_=sa.DateTime(),
         existing_nullable=False,
         existing_server_default=sa.text("(now())"),
     )
@@ -225,7 +224,7 @@ def downgrade() -> None:
         "channel_message",
         "updated_at",
         existing_type=sa.TIMESTAMP(timezone=True),
-        type_=mysql.DATETIME(),
+        type_=sa.DateTime(),
         existing_nullable=False,
         existing_server_default=sa.text("(now())"),
     )
@@ -233,7 +232,7 @@ def downgrade() -> None:
         "channel_message",
         "recorded_at",
         existing_type=sa.TIMESTAMP(timezone=True),
-        type_=mysql.DATETIME(),
+        type_=sa.DateTime(),
         existing_nullable=False,
         existing_server_default=sa.text("(now())"),
     )
@@ -241,14 +240,14 @@ def downgrade() -> None:
         "channel_message",
         "created_at",
         existing_type=sa.TIMESTAMP(timezone=True),
-        type_=mysql.DATETIME(),
+        type_=sa.DateTime(),
         existing_nullable=False,
     )
     op.alter_column(
         "channel",
         "updated_at",
         existing_type=sa.TIMESTAMP(timezone=True),
-        type_=mysql.DATETIME(),
+        type_=sa.DateTime(),
         existing_nullable=False,
         existing_server_default=sa.text("(now())"),
     )
@@ -256,7 +255,7 @@ def downgrade() -> None:
         "channel",
         "recorded_at",
         existing_type=sa.TIMESTAMP(timezone=True),
-        type_=mysql.DATETIME(),
+        type_=sa.DateTime(),
         existing_nullable=False,
         existing_server_default=sa.text("(now())"),
     )

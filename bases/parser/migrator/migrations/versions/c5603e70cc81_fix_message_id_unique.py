@@ -10,7 +10,6 @@ from collections.abc import Sequence
 
 import sqlalchemy as sa
 from alembic import op
-from sqlalchemy.dialects import mysql
 
 # revision identifiers, used by Alembic.
 revision: str = "c5603e70cc81"
@@ -21,10 +20,10 @@ depends_on: str | Sequence[str] | None = None
 
 def upgrade() -> None:
     op.drop_constraint(
-        "message_media_link_ibfk_2", "message_media_link", type_="foreignkey"
+        "message_media_link_message_id_fkey", "message_media_link", type_="foreignkey"
     )
     op.drop_constraint(
-        "channel_message_statistic_ibfk_1",
+        "channel_message_statistic_message_id_fkey",
         "channel_message_statistic",
         type_="foreignkey",
     )
@@ -37,7 +36,7 @@ def upgrade() -> None:
     op.alter_column(
         "channel_message",
         "id",
-        existing_type=mysql.BIGINT(),
+        existing_type=sa.BigInteger(),
         type_=sa.Uuid(),
         existing_nullable=False,
     )
@@ -45,7 +44,7 @@ def upgrade() -> None:
     op.alter_column(
         "message_media_link",
         "message_id",
-        existing_type=mysql.BIGINT(),
+        existing_type=sa.BigInteger(),
         type_=sa.Uuid(),
         existing_nullable=False,
     )
@@ -88,7 +87,7 @@ def upgrade() -> None:
     )
 
     op.create_foreign_key(
-        "message_media_link_ibfk_2",
+        None,
         "message_media_link",
         "channel_message",
         ["message_id"],
@@ -99,10 +98,10 @@ def upgrade() -> None:
 def downgrade() -> None:
     """Downgrade schema."""
     op.drop_constraint(
-        "message_media_link_ibfk_2", "message_media_link", type_="foreignkey"
+        "message_media_link_message_id_fkey", "message_media_link", type_="foreignkey"
     )
     op.drop_constraint(
-        "channel_message_statistic_ibfk_2",
+        "channel_message_statistic_channel_message_id_fkey",
         "channel_message_statistic",
         type_="foreignkey",
     )
@@ -114,7 +113,7 @@ def downgrade() -> None:
 
     op.add_column(
         "channel_message_statistic",
-        sa.Column("message_id", mysql.BIGINT(), autoincrement=False, nullable=False),
+        sa.Column("message_id", sa.BigInteger(), autoincrement=False, nullable=False),
     )
 
     op.drop_index(
@@ -133,7 +132,7 @@ def downgrade() -> None:
         "message_media_link",
         "message_id",
         existing_type=sa.Uuid(),
-        type_=mysql.BIGINT(),
+        type_=sa.BigInteger(),
         existing_nullable=False,
     )
 
@@ -141,21 +140,21 @@ def downgrade() -> None:
         "channel_message",
         "id",
         existing_type=sa.Uuid(),
-        type_=mysql.BIGINT(),
+        type_=sa.BigInteger(),
         existing_nullable=False,
     )
 
     op.drop_column("channel_message", "channel_message_id")
 
     op.create_foreign_key(
-        "message_media_link_ibfk_2",
+        None,
         "message_media_link",
         "channel_message",
         ["message_id"],
         ["id"],
     )
     op.create_foreign_key(
-        "channel_message_statistic_ibfk_1",
+        None,
         "channel_message_statistic",
         "channel_message",
         ["message_id"],
