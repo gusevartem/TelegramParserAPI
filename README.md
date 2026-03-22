@@ -126,3 +126,7 @@ FastAPI-приложение с двумя группами эндпоинтов
 - `ghcr.io/gusevartem/telegramparserapi-scheduler:latest`
 
 Деплой происходит автоматически при пуше в `main` через Coolify webhook. Подробнее: [DEPLOY.md](README.md).
+
+## Version
+
+v1.0.0 (22.03.2026)
