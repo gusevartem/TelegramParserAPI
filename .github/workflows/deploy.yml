@@ -129,4 +129,5 @@ jobs:
     steps:
       - name: Trigger Coolify redeploy
         run: |
-          curl -fsSL "${{ secrets.COOLIFY_WEBHOOK_PARSER }}"
+          curl -fsSL -X GET "${{ secrets.COOLIFY_WEBHOOK_PARSER }}" \
+            -H "Authorization: Bearer ${{ secrets.COOLIFY_API_TOKEN }}"
