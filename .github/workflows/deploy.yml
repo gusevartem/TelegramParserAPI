@@ -127,6 +127,15 @@ jobs:
     environment: staging
     needs: [build_and_push, test_project]
     steps:
+      - name: Cleanup old Docker images
+        continue-on-error: true
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          script: docker image prune -af && docker builder prune -af
+
       - name: Trigger Coolify redeploy
         run: |
           curl -fsSL -X GET "${{ secrets.COOLIFY_WEBHOOK_PARSER }}" \
