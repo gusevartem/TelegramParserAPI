@@ -39,6 +39,7 @@ def upgrade() -> None:
         existing_type=sa.BigInteger(),
         type_=sa.Uuid(),
         existing_nullable=False,
+        postgresql_using="gen_random_uuid()",
     )
 
     op.alter_column(
@@ -47,6 +48,7 @@ def upgrade() -> None:
         existing_type=sa.BigInteger(),
         type_=sa.Uuid(),
         existing_nullable=False,
+        postgresql_using="gen_random_uuid()",
     )
 
     op.add_column(

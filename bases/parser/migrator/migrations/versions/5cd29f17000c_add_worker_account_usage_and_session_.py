@@ -38,7 +38,7 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
     )
     op.drop_constraint(
-        op.f("message_media_link_ibfk_2"), "message_media_link", type_="foreignkey"
+        "message_media_link_message_id_fkey", "message_media_link", type_="foreignkey"
     )
     op.create_foreign_key(
         None,
