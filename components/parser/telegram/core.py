@@ -1,7 +1,10 @@
 import tempfile
 from collections.abc import AsyncIterator
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
+from dataclasses import dataclass, field
+from datetime import datetime, timedelta, timezone
 from typing import Protocol, override
+from uuid import uuid4
 
 import structlog
 from dishka import Provider, Scope, provide
@@ -10,6 +13,8 @@ from opentelemetry import trace
 from opentelemetry.trace import Status, StatusCode
 from parser.dto import ProxySettings, TelegramCredentials
 from parser.persistence import TelegramClientDAOFactory
+from telethon import TelegramClient as TelethonTelegramClient
+from telethon import errors
 from telethon.sessions.sqlite import SQLiteSession
 from telethon.sessions.string import StringSession
 
@@ -25,6 +30,17 @@ from .session_storage import (
 from .settings import TelegramSettings
 
 
+@dataclass
+class PendingAuth:
+    phone: str
+    phone_code_hash: str
+    session_string: str
+    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+
+    def is_expired(self, ttl_minutes: int = 10) -> bool:
+        return datetime.now(timezone.utc) > self.created_at + timedelta(minutes=ttl_minutes)
+
+
 class ITelegram(Protocol):
     async def add_client(
         self,
@@ -36,6 +52,15 @@ class ITelegram(Protocol):
     def get_client(
         self, timeout: int = 5
     ) -> AbstractAsyncContextManager[ITelegramClient]: ...
+
+    async def request_code(self, phone: str) -> str: ...
+
+    async def confirm_code(
+        self,
+        request_id: str,
+        code: str,
+        twofa_password: str | None = None,
+    ) -> None: ...
 
 
 class Telegram(ITelegram):
@@ -55,6 +80,119 @@ class Telegram(ITelegram):
 
         self.logger: structlog.BoundLogger = structlog.get_logger("telegram_pool")
         self.tracer: trace.Tracer = trace.get_tracer("telegram_pool")
+        self._pending_auths: dict[str, PendingAuth] = {}
+
+    def _build_bare_telethon_client(self, session: StringSession) -> TelethonTelegramClient:
+        """Build a raw Telethon client (not yet connected) using default credentials."""
+        creds = self.settings.default_credentials
+        return TelethonTelegramClient(
+            session=session,
+            api_id=creds.api_id,
+            api_hash=creds.api_hash,
+            device_model=creds.device_model,
+            system_version=creds.system_version,
+            app_version=creds.app_version,
+            lang_code=creds.lang_code,
+            system_lang_code=creds.system_lang_code,
+            timeout=30,
+            flood_sleep_threshold=0,
+        )
+
+    @override
+    async def request_code(self, phone: str) -> str:
+        with self.tracer.start_as_current_span("telegram.request_code") as span:
+            span.set_attribute("telegram.phone", phone)
+            logger = self.logger.bind(phone=phone)
+            logger.info("requesting_code", stage="start")
+
+            session = StringSession()
+            client = self._build_bare_telethon_client(session)
+            await client.connect()
+            try:
+                sent = await client.send_code_request(phone)
+            finally:
+                await client.disconnect()
+
+            request_id = str(uuid4())
+            self._pending_auths[request_id] = PendingAuth(
+                phone=phone,
+                phone_code_hash=sent.phone_code_hash,
+                session_string=session.save(),
+            )
+            logger.info("code_sent", request_id=request_id, stage="complete")
+            span.set_attribute("telegram.request_id", request_id)
+            return request_id
+
+    @override
+    async def confirm_code(
+        self,
+        request_id: str,
+        code: str,
+        twofa_password: str | None = None,
+    ) -> None:
+        with self.tracer.start_as_current_span("telegram.confirm_code") as span:
+            span.set_attribute("telegram.request_id", request_id)
+            logger = self.logger.bind(request_id=request_id)
+            logger.info("confirming_code", stage="start")
+
+            pending = self._pending_auths.get(request_id)
+            if pending is None:
+                raise InvalidClient("Auth request not found")
+            if pending.is_expired():
+                del self._pending_auths[request_id]
+                raise InvalidClient("Auth request expired, please request a new code")
+
+            session = StringSession(pending.session_string)
+            client = self._build_bare_telethon_client(session)
+            try:
+                await client.connect()
+                try:
+                    await client.sign_in(
+                        pending.phone,
+                        code=code,
+                        phone_code_hash=pending.phone_code_hash,
+                    )
+                except errors.SessionPasswordNeededError:
+                    if not twofa_password:
+                        raise InvalidClient("2FA password required")
+                    await client.sign_in(password=twofa_password)
+
+                me = await client.get_me()
+                if me is None or me.phone is None:
+                    raise InvalidClient("Client does not have phone number")
+
+                span.set_attribute("telegram.user_id", me.id)
+                span.set_attribute("telegram.phone", me.phone)
+
+                async with self.telegram_client_dao_factory() as telegram_client_dao:
+                    existing = await telegram_client_dao.find_by_id(me.id)
+                    if existing is not None:
+                        raise InvalidClient("Client already exists")
+
+                    creds = self.settings.default_credentials
+                    await telegram_client_dao.create(
+                        telegram_id=me.id,
+                        phone=me.phone,
+                        api_id=creds.api_id,
+                        api_hash=creds.api_hash,
+                        device_model=creds.device_model,
+                        system_version=creds.system_version,
+                        app_version=creds.app_version,
+                        lang_code=creds.lang_code,
+                        system_lang_code=creds.system_lang_code,
+                        proxy=None,
+                    )
+                    await telegram_client_dao.commit()
+
+                    await self.session_storage.add_session(me.id, session.save())
+
+                del self._pending_auths[request_id]
+                logger.info("code_confirmed", user_id=me.id, phone=me.phone, stage="complete")
+
+            except Exception:
+                await client.disconnect()
+                raise
+            await client.disconnect()
 
     @override
     async def add_client(

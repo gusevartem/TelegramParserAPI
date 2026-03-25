@@ -150,3 +150,69 @@ async def add_client(
             ) from e
 
         return MessageResponse(message="Client added successfully")
+
+
+class RequestCodeRequest(BaseModel):
+    phone: str
+
+
+class RequestCodeResponse(BaseModel):
+    request_id: str
+
+
+class ConfirmCodeRequest(BaseModel):
+    request_id: str
+    code: str
+    twofa_password: str | None = None
+
+
+@router.post(
+    "/client/request-code",
+    status_code=status.HTTP_200_OK,
+    responses={
+        400: {"model": ErrorResponse, "description": "Ошибка отправки кода"},
+    },
+)
+async def request_code(
+    body: RequestCodeRequest,
+    telegram: FromDishka[ITelegram],
+    _: None = Security(secret_key_check),
+) -> RequestCodeResponse:
+    with tracer.start_as_current_span("api.request_code") as span:
+        span.set_attribute("telegram.phone", body.phone)
+        request_logger = logger.bind(phone=body.phone)
+        request_logger.info("received_request_code_request", stage="start")
+        try:
+            request_id = await telegram.request_code(body.phone)
+        except InvalidClient as e:
+            request_logger.error("request_code_error", stage="error", exc_info=True)
+            span.set_status(status=Status(StatusCode.ERROR, str(e)))
+            raise CustomHTTPException.from_exception(e, status.HTTP_400_BAD_REQUEST) from e
+        request_logger.info("request_code_complete", request_id=request_id, stage="complete")
+        return RequestCodeResponse(request_id=request_id)
+
+
+@router.post(
+    "/client/confirm-code",
+    status_code=status.HTTP_201_CREATED,
+    responses={
+        400: {"model": ErrorResponse, "description": "Неверный код или аккаунт уже существует"},
+    },
+)
+async def confirm_code(
+    body: ConfirmCodeRequest,
+    telegram: FromDishka[ITelegram],
+    _: None = Security(secret_key_check),
+) -> MessageResponse:
+    with tracer.start_as_current_span("api.confirm_code") as span:
+        span.set_attribute("telegram.request_id", body.request_id)
+        request_logger = logger.bind(request_id=body.request_id)
+        request_logger.info("received_confirm_code_request", stage="start")
+        try:
+            await telegram.confirm_code(body.request_id, body.code, body.twofa_password)
+        except (InvalidClient, ClientBanned) as e:
+            request_logger.error("confirm_code_error", stage="error", exc_info=True)
+            span.set_status(status=Status(StatusCode.ERROR, str(e)))
+            raise CustomHTTPException.from_exception(e, status.HTTP_400_BAD_REQUEST) from e
+        request_logger.info("confirm_code_complete", stage="complete")
+        return MessageResponse(message="Client added successfully")
