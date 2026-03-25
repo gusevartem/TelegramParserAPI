@@ -91,6 +91,7 @@ services:
 
   migrator:
     image: ghcr.io/gusevartem/telegramparserapi-migrator:latest
+    restart: "no"
     environment:
       - DEBUG=false
 
